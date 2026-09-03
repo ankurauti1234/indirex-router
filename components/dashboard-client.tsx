@@ -1,241 +1,516 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   Activity,
-  TrendingUp,
   Database,
-  Wifi,
-  Home,
+  Router as RouterIcon,
+  Tv,
+  Smartphone,
+  Play,
+  Pause,
   CheckCircle2,
+  TrendingUp,
+  Clock,
+  ArrowUpRight,
+  Filter,
+  Layers,
+  Wifi,
+  Zap,
+  Radio,
+  FileBarChart,
+  GitFork,
+  SlidersHorizontal,
+  Terminal,
+  ChevronRight,
+  Flame,
 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import { PageContainer } from "./page-container"
+import { useTimezoneStore } from "@/lib/use-timezone-store"
+import { formatTimestamp } from "@/lib/timezones"
+
+interface PlaybackEvent {
+  id: string
+  device_id: string
+  timestamp: string | number
+  type: number
+  details: any
+}
+
+// Fallback sample data matching our exact database schema
+const FALLBACK_EVENTS: PlaybackEvent[] = [
+  {
+    id: "evt_101",
+    device_id: "RMB007",
+    timestamp: Date.now() - 1000 * 45,
+    type: 1,
+    details: {
+      household_context: { hhid: "HH0002", router_id: "RM0008" },
+      device_context: { device_type: "Smart TV", os: "Android TV", hostname: "LivingRoom-TV" },
+      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
+      playback: { bitrate: "1080p", playhead_position: 120, volume_level: 80 },
+    },
+  },
+  {
+    id: "evt_102",
+    device_id: "RM0007",
+    timestamp: Date.now() - 1000 * 90,
+    type: 2,
+    details: {
+      household_context: { hhid: "HH0005", router_id: "RM0009" },
+      device_context: { device_type: "Mobile", os: "iOS", hostname: "Ankur-iPhone" },
+      content: { platform: "Spotify", title: "Spotify Stream", content_type: "Audio" },
+      playback: { bitrate: "320kbps", playhead_position: 240, volume_level: 65 },
+    },
+  },
+  {
+    id: "evt_103",
+    device_id: "RMB007",
+    timestamp: Date.now() - 1000 * 180,
+    type: 2,
+    details: {
+      household_context: { hhid: "HH0002", router_id: "RM0008" },
+      device_context: { device_type: "Smart TV", os: "Android TV", hostname: "LivingRoom-TV" },
+      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
+      playback: { bitrate: "1080p", playhead_position: 7317, volume_level: 80 },
+    },
+  },
+  {
+    id: "evt_104",
+    device_id: "RM0007",
+    timestamp: Date.now() - 1000 * 300,
+    type: 3,
+    details: {
+      household_context: { hhid: "HH0005", router_id: "RM0009" },
+      device_context: { device_type: "Mobile", os: "iOS", hostname: "Ankur-iPhone" },
+      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
+      playback: { bitrate: "1080p", playhead_position: 912, volume_level: 75 },
+      reason: "APP_BACKGROUND",
+    },
+  },
+  {
+    id: "evt_105",
+    device_id: "RMB007",
+    timestamp: Date.now() - 1000 * 420,
+    type: 18,
+    details: {
+      household_context: { hhid: "HH0001", router_id: "RM0001" },
+      device_context: { device_type: "Smart TV", os: "webOS", hostname: "LG-OLED-TV" },
+      payload: { human_count: 3, ambient_temp: "24.5C", sensor_status: "ACTIVE" },
+    },
+  },
+  {
+    id: "evt_106",
+    device_id: "RM0008",
+    timestamp: Date.now() - 1000 * 600,
+    type: 1,
+    details: {
+      household_context: { hhid: "HH0003", router_id: "RM0008" },
+      device_context: { device_type: "Smart TV", os: "Tizen", hostname: "Samsung-4K" },
+      content: { platform: "Netflix", title: "Stranger Things S4", content_type: "TV Series" },
+      playback: { bitrate: "4K UHD", playhead_position: 45, volume_level: 90 },
+    },
+  },
+]
 
 export function DashboardClient() {
-  const [mounted, setMounted] = React.useState(false)
+  const supabase = createClient()
+  const { selectedTimezone } = useTimezoneStore()
+  const [events, setEvents] = React.useState<PlaybackEvent[]>(FALLBACK_EVENTS)
+  const [activeTab, setActiveTab] = React.useState<"ALL" | "PLAY" | "HEARTBEAT" | "DECLARATION">("ALL")
+  const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    setMounted(true)
-  }, [])
+    async function loadData() {
+      try {
+        const { data, error } = await supabase
+          .from("playback_events")
+          .select("*")
+          .order("timestamp", { ascending: false })
+          .limit(40)
 
-  // Mock data for dashboard
-  const activePanels = [
-    { hhid: "HH0002", router: "RM0008", device: "LG Smart TV", status: "Online", platform: "YouTube", activity: "Active 4s ago" },
-    { hhid: "HH0005", router: "RM0009", device: "Ankur's iPhone", status: "Online", platform: "Netflix", activity: "Active 10s ago" },
-    { hhid: "HH0001", router: "RM0001", device: "MacBook Pro", status: "Offline", platform: "-", activity: "Offline 2h ago" },
-    { hhid: "HH0007", router: "RM0014", device: "Samsung TV", status: "Online", platform: "Prime Video", activity: "Active 1m ago" },
-  ]
+        if (!error && data && data.length > 0) {
+          const parsed = data.map((d: any) => {
+            let detailsObj = {}
+            if (typeof d.details === "string") {
+              try { detailsObj = JSON.parse(d.details) } catch { detailsObj = {} }
+            } else if (d.details && typeof d.details === "object") {
+              detailsObj = d.details
+            }
+            return {
+              id: String(d.id),
+              device_id: String(d.device_id || "RM0001"),
+              timestamp: d.timestamp,
+              type: Number(d.type),
+              details: detailsObj,
+            }
+          })
+          setEvents(parsed)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [supabase])
 
-  const platformShare = [
-    { name: "YouTube", percentage: 48, color: "bg-rose-500" },
-    { name: "Netflix", percentage: 32, color: "bg-red-600" },
-    { name: "Prime Video", percentage: 12, color: "bg-sky-500" },
-    { name: "Others", percentage: 8, color: "bg-muted-foreground/60" },
-  ]
+  const getTypeName = (type: number): string => {
+    switch (type) {
+      case 1: return "PLAY_START"
+      case 2: return "PLAY_HEARTBEAT"
+      case 3: return "PLAY_PAUSE"
+      case 4: return "PLAY_RESUME"
+      case 5: return "PLAY_END"
+      case 18: return "NETWORK_DECLARATION"
+      default: return `EVENT_TYPE_${type}`
+    }
+  }
+
+  const getTypeBadgeClass = (type: number): string => {
+    switch (type) {
+      case 1: return "bg-[#1C2B42] text-[#579DFF] border-[#579DFF]/30"
+      case 2: return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+      case 3: return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+      case 4: return "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+      case 5: return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+      case 18: return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+      default: return "bg-muted text-muted-foreground border-border"
+    }
+  }
+
+  // Filter events based on active tab & limit to latest 5
+  const filteredEvents = React.useMemo(() => {
+    let list = events
+    if (activeTab === "PLAY") list = events.filter(e => e.type === 1 || e.type === 4)
+    else if (activeTab === "HEARTBEAT") list = events.filter(e => e.type === 2)
+    else if (activeTab === "DECLARATION") list = events.filter(e => e.type === 18)
+    return list.slice(0, 5)
+  }, [events, activeTab])
+
+  // Aggregate stats
+  const activeStreamsCount = events.filter(e => e.type === 1 || e.type === 2).length
+  const uniqueDevices = Array.from(new Set(events.map(e => e.device_id))).length
 
   return (
     <PageContainer
-      title="Project Overview"
-      description={
-        <span className="flex flex-wrap items-center gap-2">
-          <span>Real-time diagnostics, bandwidth distribution, and panel connectivity.</span>
-          <span className="bg-primary/5 text-primary text-[10.5px] font-medium px-2 py-0.5 rounded border border-primary/10 flex items-center gap-1">
-            <CheckCircle2 className="size-3 shrink-0 text-primary" />
-            All services operational
-          </span>
-        </span>
-      }
+      title="Overview & Highlights"
+      description="Centralized telemetry monitor, router event stream & live system diagnostics."
     >
-      {/* KPI Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* KPI 1 */}
-        <div className="bg-card p-5 rounded-xl border flex flex-col justify-between shadow-2xs">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-muted-foreground font-medium">Active Streams</span>
-            <Activity className="size-4 text-primary" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-2xl font-bold tracking-tight text-foreground">3</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Streaming across active households</p>
-          </div>
-        </div>
+      <div className="space-y-8">
+        
+        {/* ====================================================================
+            SECTION 1: Confluence "Pick up where you left off" Quick Access Grid
+           ==================================================================== */}
+        <div className="space-y-3">
+          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
+            Pick up where you left off
+          </h2>
 
-        {/* KPI 2 */}
-        <div className="bg-card p-5 rounded-xl border flex flex-col justify-between shadow-2xs">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-muted-foreground font-medium">Daily Telemetry Load</span>
-            <Database className="size-4 text-muted-foreground/80" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-2xl font-bold tracking-tight text-foreground">1,248,504</div>
-            <p className="text-[10px] text-primary font-semibold flex items-center gap-0.5 mt-1">
-              <TrendingUp className="size-3" /> +12.4% vs yesterday
-            </p>
-          </div>
-        </div>
-
-        {/* KPI 3 */}
-        <div className="bg-card p-5 rounded-xl border flex flex-col justify-between shadow-2xs">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-muted-foreground font-medium">Total Network Bandwidth</span>
-            <Wifi className="size-4 text-muted-foreground/80" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-2xl font-bold tracking-tight text-foreground">14.8 Mbps</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Real-time throughput speed</p>
-          </div>
-        </div>
-
-        {/* KPI 4 */}
-        <div className="bg-card p-5 rounded-xl border flex flex-col justify-between shadow-2xs">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-muted-foreground font-medium">Panel Coverage</span>
-            <Home className="size-4 text-muted-foreground/80" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-2xl font-bold tracking-tight text-foreground">94.8%</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Connected household meters</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Supabase Charts Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Chart 1: Telemetry Volume */}
-        <div className="bg-card border rounded-xl p-5 shadow-2xs flex flex-col justify-between h-80">
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <h3 className="text-xs font-bold text-foreground">Incoming Telemetry Rate</h3>
-              <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-md">
-                Events / sec
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Real-time parsing volume over the past 2 hours</p>
-          </div>
-
-          {/* SVG Custom Area Chart with Gradients */}
-          <div className="relative w-full h-44 border-b border-l border-border mt-4">
-            <svg className="w-full h-full" viewBox="0 0 500 150" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="chartGreenGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {/* Grid Lines */}
-              <line x1="0" y1="37.5" x2="500" y2="37.5" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="0" y1="75" x2="500" y2="75" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="0" y1="112.5" x2="500" y2="112.5" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-
-              {/* Area path */}
-              <path d="M 0 130 Q 50 110 100 125 T 200 65 T 300 80 T 400 45 T 500 30 L 500 150 L 0 150 Z" fill="url(#chartGreenGrad)" />
-              {/* Line path */}
-              <path d="M 0 130 Q 50 110 100 125 T 200 65 T 300 80 T 400 45 T 500 30" fill="none" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <div className="absolute left-2.5 top-1.5 text-[8px] font-mono text-muted-foreground select-none">150 ev/s</div>
-            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] font-mono text-muted-foreground select-none">75 ev/s</div>
-            <div className="absolute left-2.5 bottom-1 text-[8px] font-mono text-muted-foreground select-none">0 ev/s</div>
-          </div>
-          <div className="flex justify-between text-[9px] text-muted-foreground font-mono mt-1 select-none">
-            <span>2h ago</span>
-            <span>1h ago</span>
-            <span>30m ago</span>
-            <span>Just now</span>
-          </div>
-        </div>
-
-        {/* Chart 2: WAN Data Usage */}
-        <div className="bg-card border rounded-xl p-5 shadow-2xs flex flex-col justify-between h-80">
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <h3 className="text-xs font-bold text-foreground">WAN Transmission Speed</h3>
-              <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-md">
-                Mbps
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">WAN packet forwarding speeds for audience analysis</p>
-          </div>
-
-          {/* SVG Custom Area Chart with Blue Gradient */}
-          <div className="relative w-full h-44 border-b border-l border-border mt-4">
-            <svg className="w-full h-full" viewBox="0 0 500 150" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="chartBlueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgb(59, 130, 246)" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="rgb(59, 130, 246)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {/* Grid Lines */}
-              <line x1="0" y1="37.5" x2="500" y2="37.5" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="0" y1="75" x2="500" y2="75" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="0" y1="112.5" x2="500" y2="112.5" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3" />
-
-              {/* Area path */}
-              <path d="M 0 140 Q 60 135 120 120 T 240 135 T 360 80 T 480 60 T 500 55 L 500 150 L 0 150 Z" fill="url(#chartBlueGrad)" />
-              {/* Line path */}
-              <path d="M 0 140 Q 60 135 120 120 T 240 135 T 360 80 T 480 60 T 500 55" fill="none" stroke="rgb(59, 130, 246)" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <div className="absolute left-2.5 top-1.5 text-[8px] font-mono text-muted-foreground select-none">30 Mbps</div>
-            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] font-mono text-muted-foreground select-none">15 Mbps</div>
-            <div className="absolute left-2.5 bottom-1 text-[8px] font-mono text-muted-foreground select-none">0 Mbps</div>
-          </div>
-          <div className="flex justify-between text-[9px] text-muted-foreground font-mono mt-1 select-none">
-            <span>2h ago</span>
-            <span>1h ago</span>
-            <span>30m ago</span>
-            <span>Just now</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom allocation details */}
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Left Column: Bandwidth Allocation */}
-        <div className="bg-card border rounded-xl p-5 shadow-2xs md:col-span-2 flex flex-col justify-between">
-          <div className="mb-4">
-            <h3 className="text-xs font-bold text-foreground">Bandwidth Allocation</h3>
-            <p className="text-[11px] text-muted-foreground mt-1">Forwarding share breakdown by media streaming service</p>
-          </div>
-
-          <div className="space-y-4 my-2">
-            {platformShare.map((share) => (
-              <div key={share.name} className="space-y-1.5">
-                <div className="flex justify-between text-[11px] font-medium text-foreground">
-                  <span>{share.name}</span>
-                  <span>{share.percentage}%</span>
-                </div>
-                <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                  <div className={`${share.color} h-full rounded-full`} style={{ width: `${share.percentage}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Column: Active Household Panels */}
-        <div className="bg-card border rounded-xl p-5 shadow-2xs flex flex-col justify-between">
-          <div className="mb-4">
-            <h3 className="text-xs font-bold text-foreground">Active Household Panels</h3>
-            <p className="text-[11px] text-muted-foreground mt-1">Meters forward status updates</p>
-          </div>
-
-          <div className="divide-y divide-border text-xs">
-            {activePanels.map((panel) => (
-              <div key={panel.hhid} className="py-2.5 flex items-center justify-between first:pt-0 last:pb-0">
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${
-                    panel.status === "Online" ? "bg-primary" : "bg-muted-foreground/30"
-                  }`} />
-                  <div className="flex flex-col text-left">
-                    <span className="font-semibold text-foreground">{panel.hhid}</span>
-                    <span className="text-[9px] text-muted-foreground font-mono">{panel.device}</span>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Card 1: Events Explorer */}
+            <Link
+              href="/events"
+              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-md bg-[#1C2B42] text-[#579DFF] flex items-center justify-center shrink-0">
+                    <Database className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
+                      Events Explorer
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                      Live Telemetry Stream
+                    </p>
                   </div>
                 </div>
-                <span className="text-[9px] font-mono text-muted-foreground">{panel.activity}</span>
+                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
               </div>
-            ))}
+
+              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
+                <span>{events.length} packets logged</span>
+                <span className="text-[#579DFF]">Live feed</span>
+              </div>
+            </Link>
+
+            {/* Card 2: System Rules */}
+            <Link
+              href="/rules"
+              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-md bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+                    <SlidersHorizontal className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
+                      Rules Engine
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                      Routing Logic & Triggers
+                    </p>
+                  </div>
+                </div>
+                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
+              </div>
+
+              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
+                <span>12 active rules</span>
+                <span className="text-emerald-400">All passing</span>
+              </div>
+            </Link>
+
+            {/* Card 3: Event Mapping */}
+            <Link
+              href="/event-mapping"
+              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs sm:col-span-2 lg:col-span-1"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-md bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                    <GitFork className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
+                      Event Mapping
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                      Payload Schema Mapping
+                    </p>
+                  </div>
+                </div>
+                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
+              </div>
+
+              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
+                <span>Types 1..18 configured</span>
+                <span className="text-sky-400">100% mapped</span>
+              </div>
+            </Link>
           </div>
         </div>
+
+        {/* ====================================================================
+            SECTION 2: Main Grid (Feed Stream + Sidebar Widgets)
+           ==================================================================== */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          
+          {/* Left Column: Live Feed Stream (2 Cols wide) */}
+          <div className="lg:col-span-2 space-y-4">
+            
+            {/* Feed Section Title & Pill Tabs (Confluence Style) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Flame className="size-4 text-[#579DFF]" />
+                <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Discover what's happening
+                </h2>
+              </div>
+
+              {/* Confluence Pill Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ALL")}
+                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
+                    activeTab === "ALL"
+                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                  }`}
+                >
+                  All ({events.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("PLAY")}
+                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
+                    activeTab === "PLAY"
+                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                  }`}
+                >
+                  Playback (1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("HEARTBEAT")}
+                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
+                    activeTab === "HEARTBEAT"
+                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                  }`}
+                >
+                  Heartbeats (2)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("DECLARATION")}
+                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
+                    activeTab === "DECLARATION"
+                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                  }`}
+                >
+                  Declarations (18)
+                </button>
+              </div>
+            </div>
+
+            {/* Live Feed Card List */}
+            <div className="space-y-3">
+              {filteredEvents.map((evt) => {
+                const devType = evt.details?.device_context?.device_type || "Smart TV"
+                const contentTitle = evt.details?.content?.title || evt.details?.payload?.sensor_status || "Jurassic World Rebirth"
+                const platform = evt.details?.content?.platform || "OTT"
+                const hhid = evt.details?.household_context?.hhid || "HH0002"
+                const bitrate = evt.details?.playback?.bitrate || "1080p"
+                const playhead = evt.details?.playback?.playhead_position || 0
+
+                return (
+                  <div
+                    key={evt.id}
+                    className="bg-card border border-border rounded-lg p-4 hover:border-border/80 transition-all space-y-2.5 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {/* Device Avatar Circle */}
+                        <div className="size-9 rounded-full bg-muted border border-border flex items-center justify-center shrink-0 text-foreground font-semibold">
+                          {devType.toLowerCase().includes("mobile") ? (
+                            <Smartphone className="size-4 text-[#579DFF]" />
+                          ) : (
+                            <Tv className="size-4 text-emerald-400" />
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-foreground">
+                              {evt.device_id}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">•</span>
+                            <span className="text-xs text-foreground font-medium">
+                              {devType}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">—</span>
+                            <span className="text-xs font-semibold text-[#579DFF] truncate max-w-[220px]">
+                              {contentTitle}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                            Household: <span className="text-foreground">{hhid}</span> • Platform: <span className="text-foreground">{platform}</span> • Bitrate: <span className="text-foreground">{bitrate}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Event Type Badge */}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border shrink-0 ${getTypeBadgeClass(evt.type)}`}>
+                        {getTypeName(evt.type)}
+                      </span>
+                    </div>
+
+                    {/* Footer Details */}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40">
+                      <div className="flex items-center gap-3">
+                        {playhead > 0 && <span>Playhead: {playhead}s</span>}
+                        {evt.details?.reason && <span>Reason: {evt.details.reason}</span>}
+                        {evt.details?.payload?.human_count && (
+                          <span className="text-emerald-400 font-semibold">
+                            Human Count: {evt.details.payload.human_count} | Temp: {evt.details.payload.ambient_temp}
+                          </span>
+                        )}
+                      </div>
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3 text-muted-foreground" />
+                        {formatTimestamp(evt.timestamp, selectedTimezone)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Right Column: Widgets */}
+          <div className="space-y-6">
+            
+            {/* Widget 1: System Telemetry Stats */}
+            <div className="bg-card border border-border rounded-lg p-4 space-y-4 shadow-2xs">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                System Diagnostics
+              </h3>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-muted/40 rounded-md border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-medium block">Active Streams</span>
+                  <span className="text-lg font-bold text-foreground font-mono mt-0.5 block">{activeStreamsCount}</span>
+                </div>
+                <div className="p-3 bg-muted/40 rounded-md border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-medium block">Active Routers</span>
+                  <span className="text-lg font-bold text-foreground font-mono mt-0.5 block">{uniqueDevices}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">WAN Ingestion Speed</span>
+                  <span className="font-mono font-semibold text-foreground">14.8 Mbps</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Parse Error Rate</span>
+                  <span className="font-mono font-semibold text-emerald-400">0.00%</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Active Meters</span>
+                  <span className="font-mono font-semibold text-[#579DFF]">100% Operational</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Widget 2: Popular Content Streamed */}
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3 shadow-2xs">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Top Streamed Media
+              </h3>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Tv className="size-3.5 text-[#579DFF] shrink-0" />
+                    <span className="font-medium text-foreground truncate">Jurassic World Rebirth</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">OTT</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Smartphone className="size-3.5 text-emerald-400 shrink-0" />
+                    <span className="font-medium text-foreground truncate">Spotify Stream</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">Audio</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Tv className="size-3.5 text-purple-400 shrink-0" />
+                    <span className="font-medium text-foreground truncate">Stranger Things S4</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">Netflix</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
     </PageContainer>
   )

@@ -6,8 +6,6 @@ import Link from "next/link"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
@@ -25,12 +23,8 @@ import {
   Home,
   Terminal,
   Blocks,
-  PanelLeftClose,
-  PanelLeft,
-  Zap,
   FileBarChart,
   Database,
-  ChevronsUpDown,
 } from "lucide-react"
 
 export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -43,7 +37,7 @@ export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const pathname = usePathname()
-  const { state, toggleSidebar } = useSidebar()
+  const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
 
   const sidebarGroups = [
@@ -82,46 +76,15 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
 
   return (
     <Sidebar
-      collapsible="icon"
-      className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-200"
+      collapsible="offcanvas"
+      className="top-12! h-[calc(100vh-3rem)]! border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-200"
       {...props}
     >
-      {/* Atlassian App / Project Header */}
-      <SidebarHeader className="h-14 border-b border-sidebar-border flex flex-row items-center px-3 py-2 shrink-0">
-        <Link
-          href="/dashboard"
-          className={`flex items-center gap-2.5 w-full rounded p-1 hover:bg-muted/50 transition-colors group ${
-            isCollapsed ? "justify-center" : ""
-          }`}
-        >
-          {/* Atlassian Product Badge */}
-          <div className="flex size-7 items-center justify-center rounded bg-primary text-primary-foreground shrink-0 shadow-2xs">
-            <Zap className="size-4 fill-primary-foreground text-primary-foreground" />
-          </div>
-
-          {!isCollapsed && (
-            <div className="flex flex-col flex-1 min-w-0 text-left">
-              <span className="font-bold text-xs tracking-tight text-foreground truncate leading-snug">
-                Indirex Router
-              </span>
-              <span className="text-[10px] font-medium text-muted-foreground truncate leading-none">
-                Telemetry & Control
-              </span>
-            </div>
-          )}
-
-          {!isCollapsed && (
-            <ChevronsUpDown className="size-3.5 text-muted-foreground/70 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
-          )}
-        </Link>
-      </SidebarHeader>
-
-      {/* Sidebar Navigation Groups */}
-      <SidebarContent className="py-2 px-2 gap-4">
+      <SidebarContent className="py-3 px-2 gap-4 text-xs overflow-y-auto select-none">
         {sidebarGroups.map((group) => (
-          <SidebarGroup key={group.label} className="p-0 gap-1">
+          <SidebarGroup key={group.label} className="p-0 space-y-1">
             {!isCollapsed && (
-              <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80 uppercase px-2 py-1 h-6">
+              <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase px-2 h-5">
                 {group.label}
               </SidebarGroupLabel>
             )}
@@ -138,18 +101,19 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.title}
-                        className={`relative w-full h-8 justify-start gap-2.5 rounded px-2.5 text-xs transition-all font-medium ${
+                        className={`relative w-full h-8.5 justify-start gap-3 rounded-md pl-3 pr-2.5 text-[13px] transition-colors font-medium ${
                           isActive
-                            ? "bg-accent text-accent-foreground font-semibold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:bg-primary before:rounded-r"
-                            : "text-sidebar-foreground hover:bg-muted/60 hover:text-foreground"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         }`}
                         render={<Link href={item.url} />}
                       >
+                        {isActive && (
+                          <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-sidebar-accent-foreground" />
+                        )}
                         <item.icon
                           className={`size-4 shrink-0 transition-colors ${
-                            isActive
-                              ? "text-primary"
-                              : "text-muted-foreground group-hover/menu-button:text-foreground"
+                            isActive ? "text-sidebar-accent-foreground" : "text-muted-foreground"
                           }`}
                         />
                         {!isCollapsed && (
@@ -164,35 +128,6 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
           </SidebarGroup>
         ))}
       </SidebarContent>
-
-      {/* Sidebar Footer with Collapse Toggle */}
-      <SidebarFooter className="border-t border-sidebar-border p-2 shrink-0">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip={isCollapsed ? "Expand Sidebar (⌘B)" : "Collapse Sidebar (⌘B)"}
-              onClick={toggleSidebar}
-              className={`w-full h-8 justify-start gap-2.5 rounded px-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground font-medium ${
-                isCollapsed ? "justify-center px-0" : ""
-              }`}
-            >
-              {isCollapsed ? (
-                <PanelLeft className="size-4 shrink-0" />
-              ) : (
-                <PanelLeftClose className="size-4 shrink-0" />
-              )}
-              {!isCollapsed && (
-                <div className="flex items-center justify-between w-full">
-                  <span>Collapse sidebar</span>
-                  <kbd className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-muted-foreground font-mono">
-                    ⌘B
-                  </kbd>
-                </div>
-              )}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   )
 }

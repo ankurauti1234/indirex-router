@@ -2,11 +2,19 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@font-face {
+  font-family: 'Atlassian Sans';
+  src: url('/AtlassianSans-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans), 'Atlassian Sans', system-ui, sans-serif;
+  --font-sans: var(--font-sans), 'Atlassian Sans', system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,45 +55,44 @@
 
 :root {
   /* ==========================================================================
-     Atlassian Design System (ADS) Light Theme Tokens
-     Official Palette: Atlassian Neutral (N), Brand Blue (B), Green (G), Red (R)
+     Atlassian Design System (ADS) Light Theme Palette
      ========================================================================== */
-  --background: oklch(0.982 0.005 245);          /* ADS N10 Neutral Page Background #F7F8F9 */
-  --foreground: oklch(0.245 0.040 250);          /* ADS N800 Primary Text #172B4D */
-  --card: oklch(1 0 0);                          /* ADS Raised Surface #FFFFFF */
-  --card-foreground: oklch(0.245 0.040 250);     /* ADS N800 Card Text #172B4D */
-  --popover: oklch(1 0 0);                       /* ADS Overlay Surface #FFFFFF */
-  --popover-foreground: oklch(0.245 0.040 250);  /* ADS N800 Popover Text #172B4D */
-  --primary: oklch(0.528 0.201 254.91);          /* ADS B400 Brand Blue Primary Action #0C66E4 */
-  --primary-foreground: oklch(1 0 0);           /* ADS White Text on Primary #FFFFFF */
-  --secondary: oklch(0.960 0.005 247);          /* ADS N20 Neutral Surface #F1F2F4 */
-  --secondary-foreground: oklch(0.245 0.040 250);/* ADS N800 Text #172B4D */
-  --muted: oklch(0.960 0.005 247);              /* ADS N20 Muted Container #F1F2F4 */
-  --muted-foreground: oklch(0.420 0.035 250);   /* ADS N500 Subtle Text #44546F */
-  --accent: oklch(0.945 0.020 245);             /* ADS B50 Brand Subtle Selection #E9F2FF */
-  --accent-foreground: oklch(0.528 0.201 254.91);/* ADS B400 Brand Text #0C66E4 */
-  --destructive: oklch(0.530 0.200 25);         /* ADS R400 Danger Bold Red #CA3521 */
-  --destructive-foreground: oklch(1 0 0);       /* ADS White Text #FFFFFF */
-  --border: oklch(0.908 0.008 247);             /* ADS N40 Standard Divider/Border #DCE0E5 */
-  --input: oklch(0.908 0.008 247);              /* ADS N40 Standard Input Border #DCE0E5 */
-  --ring: oklch(0.528 0.201 254.91);            /* ADS B400 Focus Ring #0C66E4 */
+  --background: #F7F8F9;          /* Atlassian Light Page Background #F7F8F9 */
+  --foreground: #172B4D;          /* Atlassian Primary Dark Text #172B4D */
+  --card: #FFFFFF;                /* Atlassian Surface Background #FFFFFF */
+  --card-foreground: #172B4D;     /* Atlassian Card Text #172B4D */
+  --popover: #FFFFFF;             /* Atlassian Overlay Surface #FFFFFF */
+  --popover-foreground: #172B4D;  /* Atlassian Popover Text #172B4D */
+  --primary: #0C66E4;             /* Atlassian Brand Blue #0C66E4 */
+  --primary-foreground: #FFFFFF;  /* White Text on Primary */
+  --secondary: #F1F2F4;           /* Atlassian Raised Surface #F1F2F4 */
+  --secondary-foreground: #172B4D;
+  --muted: #F1F2F4;               /* Atlassian Muted Container #F1F2F4 */
+  --muted-foreground: #626F86;    /* Atlassian Muted Text #626F86 */
+  --accent: #E9F2FF;              /* Atlassian Subtle Selection #E9F2FF */
+  --accent-foreground: #0C66E4;   /* Atlassian Brand Text #0C66E4 */
+  --destructive: #CA3521;         /* Atlassian Danger Red #CA3521 */
+  --destructive-foreground: #FFFFFF;
+  --border: #DCDFE4;              /* Atlassian Border #DCDFE4 */
+  --input: #DCDFE4;               /* Atlassian Input Border #DCDFE4 */
+  --ring: #0C66E4;                /* Focus Ring #0C66E4 */
 
   /* Atlassian Chart & Category Palette */
-  --chart-1: oklch(0.528 0.201 254.91);         /* ADS B400 Blue #0C66E4 */
-  --chart-2: oklch(0.600 0.160 160);            /* ADS G400 Green Success #22A06B */
-  --chart-3: oklch(0.700 0.160 80);             /* ADS Y400 Yellow Warning #E2B203 */
-  --chart-4: oklch(0.580 0.180 300);            /* ADS P400 Purple #8270DB */
-  --chart-5: oklch(0.650 0.180 40);             /* ADS O400 Orange #FE6E45 */
+  --chart-1: #0C66E4;
+  --chart-2: #22A06B;
+  --chart-3: #E2B203;
+  --chart-4: #8270DB;
+  --chart-5: #FE6E45;
 
   /* Atlassian Sidebar Navigation Tokens */
-  --sidebar: oklch(0.985 0.003 247);            /* ADS Sidebar Background #F7F8F9 */
-  --sidebar-foreground: oklch(0.420 0.035 250);   /* ADS N500 Sidebar Text #44546F */
-  --sidebar-primary: oklch(0.528 0.201 254.91);   /* ADS B400 Active Nav Blue #0C66E4 */
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.945 0.020 245);      /* ADS B50 Active Nav Item #E9F2FF */
-  --sidebar-accent-foreground: oklch(0.528 0.201 254.91); /* ADS B400 Nav Text #0C66E4 */
-  --sidebar-border: oklch(0.908 0.008 247);      /* ADS N40 Border #DCE0E5 */
-  --sidebar-ring: oklch(0.528 0.201 254.91);
+  --sidebar: #F7F8F9;             /* Atlassian Sidebar BG #F7F8F9 */
+  --sidebar-foreground: #44546F;  /* Atlassian Sidebar Text #44546F */
+  --sidebar-primary: #0C66E4;     /* Atlassian Active Blue #0C66E4 */
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E9F2FF;      /* Atlassian Active Nav Pill #E9F2FF */
+  --sidebar-accent-foreground: #0C66E4; /* Atlassian Active Nav Text #0C66E4 */
+  --sidebar-border: #DCDFE4;      /* Atlassian Border #DCDFE4 */
+  --sidebar-ring: #0C66E4;
 
   --radius: 0.25rem;                            /* ADS Standard 4px Radius */
 
@@ -104,45 +111,44 @@
 
 .dark {
   /* ==========================================================================
-     Atlassian Design System (ADS) Dark Theme Tokens
-     Official Dark Palette: Atlassian Dark Neutral (DN), Dark Blue (DB)
+     Atlassian Confluence Exact Dark Palette
      ========================================================================== */
-  --background: oklch(0.200 0.010 240);          /* ADS Dark N10 Background #1D2125 */
-  --foreground: oklch(0.850 0.015 240);          /* ADS Dark Primary Text #C7D1DB */
-  --card: oklch(0.230 0.010 240);                /* ADS Dark N20 Raised Surface #22272B */
-  --card-foreground: oklch(0.850 0.015 240);     /* ADS Dark Card Text #C7D1DB */
-  --popover: oklch(0.270 0.010 240);             /* ADS Dark N30 Surface Overlay #2C333A */
-  --popover-foreground: oklch(0.850 0.015 240);  /* ADS Dark Popover Text #C7D1DB */
-  --primary: oklch(0.680 0.180 245);            /* ADS Dark B200 Brand Blue #579DFF / #388BFF */
-  --primary-foreground: oklch(0.180 0.010 240); /* ADS Dark High-Contrast Text #1D2125 */
-  --secondary: oklch(0.270 0.010 240);          /* ADS Dark N30 Neutral Surface #2C333A */
-  --secondary-foreground: oklch(0.850 0.015 240);/* ADS Dark Secondary Text #C7D1DB */
-  --muted: oklch(0.250 0.010 240);              /* ADS Dark Subtle Container #282E33 */
-  --muted-foreground: oklch(0.720 0.015 240);   /* ADS Dark Muted Subtle Text #9FADBC */
-  --accent: oklch(0.270 0.030 245);             /* ADS Dark Blue Active Selection #1C2B4D */
-  --accent-foreground: oklch(0.750 0.150 245);  /* ADS Dark Accent Text #579DFF */
-  --destructive: oklch(0.620 0.200 25);         /* ADS Dark Danger Red #FF6651 */
-  --destructive-foreground: oklch(0.980 0 0);   /* ADS White Text #FFFFFF */
-  --border: oklch(0.300 0.010 240);             /* ADS Dark Border N400 #384047 */
-  --input: oklch(0.270 0.010 240);              /* ADS Dark Input Border #2C333A */
-  --ring: oklch(0.680 0.180 245);               /* ADS Dark Focus Ring #579DFF */
+  --background: #1F1F21;          /* Confluence Main Background #1F1F21 */
+  --foreground: #B6C2CF;          /* Confluence Primary Text #B6C2CF */
+  --card: #1F1F21;                /* Confluence Surface Background #1F1F21 */
+  --card-foreground: #B6C2CF;     /* Confluence Card Text #B6C2CF */
+  --popover: #22272B;             /* Confluence Popover Surface #22272B */
+  --popover-foreground: #B6C2CF;  /* Confluence Popover Text #B6C2CF */
+  --primary: #0C66E4;             /* Confluence Brand Blue #0C66E4 */
+  --primary-foreground: #FFFFFF;  /* White Text on Primary */
+  --secondary: #22272B;           /* Confluence Raised Card Surface #22272B */
+  --secondary-foreground: #B6C2CF;
+  --muted: #22272B;               /* Confluence Muted Surface #22272B */
+  --muted-foreground: #9FADBC;    /* Confluence Muted Text #9FADBC */
+  --accent: #1C2B42;              /* Confluence Active Pill Selection #1C2B42 */
+  --accent-foreground: #579DFF;   /* Confluence Active Blue Text #579DFF */
+  --destructive: #FF6651;         /* Confluence Danger Red #FF6651 */
+  --destructive-foreground: #FFFFFF;
+  --border: #2C333A;              /* Confluence Divider Border #2C333A */
+  --input: #38414A;               /* Confluence Input Border #38414A */
+  --ring: #579DFF;                /* Focus Ring #579DFF */
 
   /* Atlassian Dark Chart Palette */
-  --chart-1: oklch(0.680 0.180 245);            /* ADS Dark Blue #579DFF */
-  --chart-2: oklch(0.720 0.150 160);            /* ADS Dark Green Success #7EE2B8 */
-  --chart-3: oklch(0.780 0.150 80);             /* ADS Dark Yellow Warning #F5CD47 */
-  --chart-4: oklch(0.700 0.160 300);            /* ADS Dark Purple #9F8FEF */
-  --chart-5: oklch(0.750 0.160 40);             /* ADS Dark Orange #FE8F73 */
+  --chart-1: #579DFF;
+  --chart-2: #7EE2B8;
+  --chart-3: #F5CD47;
+  --chart-4: #9F8FEF;
+  --chart-5: #FE8F73;
 
   /* Atlassian Dark Sidebar Tokens */
-  --sidebar: oklch(0.180 0.010 240);            /* ADS Dark Nav Background #161A1D */
-  --sidebar-foreground: oklch(0.720 0.015 240);   /* ADS Dark Nav Text #9FADBC */
-  --sidebar-primary: oklch(0.680 0.180 245);      /* ADS Dark Active Nav Blue #579DFF */
-  --sidebar-primary-foreground: oklch(0.180 0.010 240);
-  --sidebar-accent: oklch(0.270 0.030 245);        /* ADS Dark Active Item #1C2B4D */
-  --sidebar-accent-foreground: oklch(0.750 0.150 245); /* ADS Dark Nav Text #579DFF */
-  --sidebar-border: oklch(0.300 0.010 240);      /* ADS Dark Border #384047 */
-  --sidebar-ring: oklch(0.680 0.180 245);
+  --sidebar: #1F1F21;             /* Confluence Sidebar BG #1F1F21 */
+  --sidebar-foreground: #B6C2CF;  /* Confluence Nav Text #B6C2CF */
+  --sidebar-primary: #579DFF;     /* Confluence Active Blue #579DFF */
+  --sidebar-primary-foreground: #1F1F21;
+  --sidebar-accent: #1C2B42;      /* Confluence Active Nav Item Pill #1C2B42 */
+  --sidebar-accent-foreground: #579DFF; /* Confluence Active Text #579DFF */
+  --sidebar-border: #2C333A;     /* Confluence Border #2C333A */
+  --sidebar-ring: #579DFF;
 
   --radius: 0.25rem;
 

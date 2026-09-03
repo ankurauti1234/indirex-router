@@ -23,17 +23,19 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="[--header-height:calc(--spacing(14))]">
-      <SidebarProvider>
-        <AppSidebar user={userData} />
-        <SidebarInset className="flex flex-col min-h-svh min-w-0">
-          <SiteHeader user={userData} />
-          <div className="flex flex-1 flex-col min-w-0">
-            {children}
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </div>
+    <SidebarProvider>
+      <div className="flex flex-col min-h-svh w-full bg-background">
+        <SiteHeader user={userData} />
+        <div className="flex flex-1 min-h-0 w-full">
+          <AppSidebar user={userData} />
+          <SidebarInset className="flex flex-col min-h-0 min-w-0 flex-1">
+            <div className="flex flex-1 flex-col min-w-0">
+              {children}
+            </div>
+          </SidebarInset>
+        </div>
+      </div>
+    </SidebarProvider>
   )
 }
 

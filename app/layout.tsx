@@ -1,13 +1,14 @@
-import { Inter, JetBrains_Mono } from "next/font/google"
+import localFont from "next/font/local"
+import { JetBrains_Mono } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+const fontSans = localFont({
+  src: "../public/AtlassianSans-latin.woff2",
   variable: "--font-sans",
+  display: "swap",
 })
 
 const fontMono = JetBrains_Mono({
@@ -24,9 +25,9 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", inter.variable)}
+      className={cn("antialiased font-sans", fontMono.variable, fontSans.variable)}
     >
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

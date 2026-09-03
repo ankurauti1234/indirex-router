@@ -4,20 +4,10 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { createClient } from "@/lib/supabase/client"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
 import { timezones } from "@/lib/timezones"
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,14 +21,11 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
-  Router,
   Search,
   HelpCircle,
-  Compass,
   Bell,
   LogOut,
-  Home,
-  HomeIcon,
+  Zap,
 } from "lucide-react"
 
 export interface SiteHeaderProps {
@@ -49,31 +36,7 @@ export interface SiteHeaderProps {
   }
 }
 
-const routeTitleMap: Record<string, string> = {
-  "dashboard": "Dashboard",
-  "events": "Events Explorer",
-  "sessions": "Sessions",
-  "activity": "Activity Timeline",
-  "reports": "Reports",
-  "event-mapping": "Event Mapping",
-  "rules": "Rules",
-  "devices": "Devices",
-  "households": "Households",
-  "logs": "Diagnostics & Logs",
-  "integrations": "Integrations",
-  "settings": "Settings",
-}
-
-function formatSegmentTitle(segment: string): string {
-  if (routeTitleMap[segment]) return routeTitleMap[segment]
-  return segment
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ")
-}
-
 export function SiteHeader({ user }: SiteHeaderProps) {
-  const { state } = useSidebar()
   const router = useRouter()
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
@@ -97,124 +60,73 @@ export function SiteHeader({ user }: SiteHeaderProps) {
     { name: "Light", value: "light" }
   ]
 
-  const pathSegments = pathname.split('/').filter(Boolean)
+  const userInitials = user?.name
+    ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+    : "AA"
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center border-b bg-background px-4">
-      <div className="flex w-full items-center justify-between">
+    <header className="sticky top-0 z-50 flex h-12 w-full shrink-0 items-center border-b border-border bg-card text-card-foreground px-3 select-none transition-colors">
+      <div className="flex w-full items-center justify-between gap-4">
         
-        {/* Left Section: Mobile Menu Trigger + Dynamic Breadcrumbs */}
+        {/* Left Section: Mobile Trigger, Logo & App Name */}
         <div className="flex items-center gap-2">
           {/* Mobile Sidebar Trigger */}
-          <SidebarTrigger className="md:hidden size-8" />
-          
-          {/* Desktop Real Dynamic Breadcrumbs */}
-          <div className="flex items-center font-normal text-muted-foreground select-none">
-            <Breadcrumb>
-              <BreadcrumbList className="flex items-center gap-1 text-xs text-muted-foreground font-normal">
+          <SidebarTrigger className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent" />
 
-                {pathSegments.length === 0 || (pathSegments.length === 1 && pathSegments[0] === "dashboard") ? (
-                  <React.Fragment>
-                    <BreadcrumbSeparator className="text-muted-foreground/30 px-1 font-light">/</BreadcrumbSeparator>
-                    <BreadcrumbItem>
-                      <BreadcrumbPage className="font-semibold text-foreground py-0.5 px-1">
-                        Dashboard
-                      </BreadcrumbPage>
-                    </BreadcrumbItem>
-                  </React.Fragment>
-                ) : (
-                  pathSegments.map((segment, index) => {
-                    const href = "/" + pathSegments.slice(0, index + 1).join("/")
-                    const isLast = index === pathSegments.length - 1
-                    const title = formatSegmentTitle(segment)
+          {/* Logo & Title */}
+          <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
+            <div className="flex size-6 items-center justify-center rounded bg-primary text-primary-foreground shrink-0 shadow-2xs font-bold text-xs">
+              <Zap className="size-3.5 fill-current" />
+            </div>
+            <span className="font-bold text-sm text-foreground tracking-tight">Indirex Router</span>
+          </Link>
+        </div>
 
-                    return (
-                      <React.Fragment key={href}>
-                        <BreadcrumbSeparator className="text-muted-foreground/30 px-1 font-light">/</BreadcrumbSeparator>
-                        <BreadcrumbItem>
-                          {isLast ? (
-                            <BreadcrumbPage className="font-semibold text-foreground py-0.5 px-1">
-                              {title}
-                            </BreadcrumbPage>
-                          ) : (
-                            <BreadcrumbLink render={<Link href={href} />} className="hover:text-foreground cursor-pointer transition-colors py-0.5 px-1 rounded text-muted-foreground font-normal">
-                              {title}
-                            </BreadcrumbLink>
-                          )}
-                        </BreadcrumbItem>
-                      </React.Fragment>
-                    )
-                  })
-                )}
-              </BreadcrumbList>
-            </Breadcrumb>
+        {/* Center Section: Search Bar */}
+        <div className="flex-1 max-w-xl mx-2 hidden sm:block">
+          <div className="relative flex items-center w-full">
+            <Search className="absolute left-3 size-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="w-full h-8 pl-9 pr-12 text-xs bg-muted/60 border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+            />
+            <kbd className="pointer-events-none absolute right-2 top-1.5 hidden select-none items-center gap-0.5 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-muted-foreground font-medium sm:flex">
+              <span>Ctrl</span>K
+            </kbd>
           </div>
         </div>
 
-        {/* Right Section: Feedback, Search, Actions, Profile */}
-        <div className="flex items-center gap-3">
-          {/* Feedback */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="hidden sm:inline-flex text-muted-foreground hover:text-foreground text-xs font-normal h-8 px-2.5 transition-colors"
-          >
-            Feedback
-          </Button>
+        {/* Right Section: Notifications, Help, Profile */}
+        <div className="flex items-center gap-2 shrink-0">
 
-          {/* Search Button */}
-          <Button
-            variant="outline"
-            className="relative h-8 w-44 justify-start rounded-md bg-muted/20 hover:bg-muted/40 text-xs text-muted-foreground pr-10 border border-border/80 shadow-xs hidden md:flex"
-          >
-            <Search className="mr-2 h-3.5 w-3.5" />
-            <span>Search...</span>
-            <kbd className="pointer-events-none absolute right-1.5 top-1.5 hidden select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[9px] font-medium opacity-100 sm:flex text-muted-foreground/85">
-              <span>Ctrl</span>K
-            </kbd>
-          </Button>
-
-          {/* Help Icon */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground transition-colors rounded-full"
-            title="Help"
-          >
-            <HelpCircle className="size-4" />
-          </Button>
-
-          {/* Advisors/Compass Icon */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground transition-colors rounded-full"
-            title="Advisors"
-          >
-            <Compass className="size-4" />
-          </Button>
-
-          {/* Notifications Icon */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground transition-colors rounded-full"
+          {/* Notification Bell with Badge */}
+          <button
+            type="button"
+            className="relative p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             title="Notifications"
           >
             <Bell className="size-4" />
-          </Button>
+            <span className="absolute top-1 right-1 flex size-2 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+              1
+            </span>
+          </button>
+
+          {/* Help Icon */}
+          <button
+            type="button"
+            className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden sm:flex"
+            title="Help"
+          >
+            <HelpCircle className="size-4" />
+          </button>
 
           {/* User Profile Dropdown Menu */}
           <DropdownMenu>
-            <DropdownMenuTrigger render={<button className="outline-hidden focus:outline-hidden" />}>
-              <Avatar className="size-7 hover:ring-2 hover:ring-border transition-all cursor-pointer">
-                {user?.avatar ? (
-                  <AvatarImage src={user.avatar} alt={user.name || "User"} />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium uppercase">
-                  {user?.name?.[0] || "U"}
-                </AvatarFallback>
-              </Avatar>
+            <DropdownMenuTrigger render={<button className="outline-hidden focus:outline-hidden cursor-pointer ml-1" />}>
+              <div className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold ring-2 ring-transparent hover:ring-primary/50 transition-all">
+                {userInitials}
+              </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-60 mt-1.5">
               {/* User Identity Details */}
@@ -276,7 +188,6 @@ export function SiteHeader({ user }: SiteHeaderProps) {
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       onKeyDown={(e) => {
-                        // Prevent menu keyboard navigation from intercepting typing
                         if (e.key !== "Escape") {
                           e.stopPropagation()
                         }

@@ -29,7 +29,9 @@ import { PageContainer } from "./page-container"
 import { createClient } from "@/lib/supabase/client"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -59,6 +61,7 @@ interface DeviceContext {
   os: string
   app_version: string
   ip_address: string
+  mac_address?: string
 }
 
 interface UserContext {
@@ -134,27 +137,53 @@ interface EventType {
   field_rules?: any[]
 }
 
+export interface FilterChip {
+  id: string
+  field: "device_id" | "device_type" | "hostname" | "device" | "id" | "text"
+  value: string
+}
+
+// Helper to set time (HH:mm) on a Date object
+const setTimeToDate = (date: Date, timeStr: string): Date => {
+  const [hoursStr, minutesStr] = timeStr.split(":")
+  const hours = parseInt(hoursStr || "0", 10)
+  const minutes = parseInt(minutesStr || "0", 10)
+  
+  const newDate = new Date(date)
+  newDate.setHours(hours, minutes, 0, 0)
+  return newDate
+}
+
+// Helper to format Date to HH:mm string for time inputs
+const formatTimeToHHMM = (date?: Date): string => {
+  if (!date) return "00:00"
+  const h = String(date.getHours()).padStart(2, "0")
+  const m = String(date.getMinutes()).padStart(2, "0")
+  return `${h}:${m}`
+}
+
 export function EventsClient() {
   const { selectedTimezone } = useTimezoneStore()
   const [events, setEvents] = React.useState<EventLog[]>([])
   const [eventTypes, setEventTypes] = React.useState<EventType[]>([])
   const [selectedEvent, setSelectedEvent] = React.useState<EventLog | null>(null)
   
-  // Search & Filter Settings (Staging)
-  const [stagedDeviceIdFilter, setStagedDeviceIdFilter] = React.useState<string>("ALL")
+  // Intelligent Chip-based Search Filters
+  const [stagedChips, setStagedChips] = React.useState<FilterChip[]>([])
+  const [appliedChips, setAppliedChips] = React.useState<FilterChip[]>([])
+  const [stagedSearchField, setStagedSearchField] = React.useState<FilterChip["field"]>("device_id")
   const [stagedSearchTerm, setStagedSearchTerm] = React.useState("")
-  const [stagedSearchField, setStagedSearchField] = React.useState<"all" | "device_id" | "id" | "hostname" | "device" | "device_type">("all")
-  const [stagedTypeFilter, setStagedTypeFilter] = React.useState<string>("ALL")
-  const [stagedStartDateFilter, setStagedStartDateFilter] = React.useState<Date | undefined>(undefined)
-  const [stagedEndDateFilter, setStagedEndDateFilter] = React.useState<Date | undefined>(undefined)
+  const [showSuggestions, setShowSuggestions] = React.useState(false)
 
-  // Active/Applied Filter Settings
-  const [appliedDeviceIdFilter, setAppliedDeviceIdFilter] = React.useState<string>("ALL")
-  const [appliedSearchTerm, setAppliedSearchTerm] = React.useState("")
-  const [appliedSearchField, setAppliedSearchField] = React.useState<"all" | "device_id" | "id" | "hostname" | "device" | "device_type">("all")
+  const [stagedTypeFilter, setStagedTypeFilter] = React.useState<string>("ALL")
+  const [stagedDateRange, setStagedDateRange] = React.useState<DateRange | undefined>(undefined)
+  const stagedStartDateFilter = stagedDateRange?.from
+  const stagedEndDateFilter = stagedDateRange?.to
+
   const [appliedTypeFilter, setAppliedTypeFilter] = React.useState<string>("ALL")
-  const [appliedStartDateFilter, setAppliedStartDateFilter] = React.useState<Date | undefined>(undefined)
-  const [appliedEndDateFilter, setAppliedEndDateFilter] = React.useState<Date | undefined>(undefined)
+  const [appliedDateRange, setAppliedDateRange] = React.useState<DateRange | undefined>(undefined)
+  const appliedStartDateFilter = appliedDateRange?.from
+  const appliedEndDateFilter = appliedDateRange?.to
 
   // Auto Refresh Interval selector state (default: 60 sec i.e. 60000 ms)
   const [refreshInterval, setRefreshInterval] = React.useState<number>(60000)
@@ -163,16 +192,69 @@ export function EventsClient() {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [itemsPerPage, setItemsPerPage] = React.useState(25)
 
-  // Dynamic unique list of Device IDs extracted from loaded telemetry events
+  // Chip management handlers
+  const handleAddChip = (fieldParam?: FilterChip["field"], valueParam?: string) => {
+    const targetField = fieldParam || stagedSearchField
+    const targetValue = (valueParam !== undefined ? valueParam : stagedSearchTerm).trim()
+    if (!targetValue) return
+
+    const isDuplicate = stagedChips.some(c => c.field === targetField && c.value.toLowerCase() === targetValue.toLowerCase())
+    if (!isDuplicate) {
+      const newChip: FilterChip = {
+        id: Math.random().toString(36).substring(2, 9),
+        field: targetField,
+        value: targetValue,
+      }
+      const updated = [...stagedChips, newChip]
+      setStagedChips(updated)
+      setAppliedChips(updated)
+    }
+
+    setStagedSearchTerm("")
+    setShowSuggestions(false)
+  }
+
+  const handleRemoveChip = (chipId: string) => {
+    const updated = stagedChips.filter(c => c.id !== chipId)
+    setStagedChips(updated)
+    setAppliedChips(updated)
+  }
+
+  // Dynamic unique lists for Autocomplete Suggestions
   const uniqueDeviceIds = React.useMemo(() => {
-    const ids = events.map(e => e.device_id).filter(Boolean)
+    const ids = events.map(e => e.device_id).filter((val): val is string => Boolean(val))
     return Array.from(new Set(ids)).sort()
   }, [events])
+
+  const uniqueDeviceTypes = React.useMemo(() => {
+    const types = events.map(e => e.details?.device_context?.device_type).filter((val): val is string => Boolean(val))
+    return Array.from(new Set(types)).sort()
+  }, [events])
+
+  const uniqueHostnames = React.useMemo(() => {
+    const names = events.map(e => e.details?.device_context?.hostname).filter((val): val is string => Boolean(val))
+    return Array.from(new Set(names)).sort()
+  }, [events])
+
+  const suggestions = React.useMemo(() => {
+    const term = stagedSearchTerm.toLowerCase().trim()
+    let list: string[] = []
+
+    if (stagedSearchField === "device_id") list = uniqueDeviceIds
+    else if (stagedSearchField === "device_type") list = uniqueDeviceTypes
+    else if (stagedSearchField === "hostname") list = uniqueHostnames
+
+    const existingValuesForField = new Set(stagedChips.filter(c => c.field === stagedSearchField).map(c => c.value.toLowerCase()))
+    const filteredList = list.filter(item => !existingValuesForField.has(item.toLowerCase()))
+
+    if (!term) return filteredList.slice(0, 8)
+    return filteredList.filter(item => item.toLowerCase().includes(term)).slice(0, 8)
+  }, [stagedSearchField, stagedSearchTerm, uniqueDeviceIds, uniqueDeviceTypes, uniqueHostnames, stagedChips])
 
   // Reset page when filters change
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [appliedDeviceIdFilter, appliedSearchTerm, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
+  }, [appliedChips, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
 
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = React.useState({
@@ -192,43 +274,51 @@ export function EventsClient() {
   const [copiedText, setCopiedText] = React.useState<string | null>(null)
 
   const hasChanges = 
-    stagedDeviceIdFilter !== appliedDeviceIdFilter ||
-    stagedSearchTerm !== appliedSearchTerm ||
-    stagedSearchField !== appliedSearchField ||
+    stagedChips.length !== appliedChips.length ||
+    stagedSearchTerm.trim() !== "" ||
     stagedTypeFilter !== appliedTypeFilter ||
-    stagedStartDateFilter?.getTime() !== appliedStartDateFilter?.getTime() ||
-    stagedEndDateFilter?.getTime() !== appliedEndDateFilter?.getTime()
+    stagedDateRange?.from?.getTime() !== appliedDateRange?.from?.getTime() ||
+    stagedDateRange?.to?.getTime() !== appliedDateRange?.to?.getTime()
 
   const isFilterApplied = 
-    appliedDeviceIdFilter !== "ALL" ||
-    appliedSearchTerm !== "" ||
+    appliedChips.length > 0 ||
     appliedTypeFilter !== "ALL" ||
-    appliedStartDateFilter !== undefined ||
-    appliedEndDateFilter !== undefined
+    appliedDateRange !== undefined
 
   const handleApplyFilters = () => {
-    setAppliedDeviceIdFilter(stagedDeviceIdFilter)
-    setAppliedSearchTerm(stagedSearchTerm)
-    setAppliedSearchField(stagedSearchField)
+    let currentChips = [...stagedChips]
+    if (stagedSearchTerm.trim()) {
+      const pendingVal = stagedSearchTerm.trim()
+      const isDuplicate = currentChips.some(c => c.field === stagedSearchField && c.value.toLowerCase() === pendingVal.toLowerCase())
+      if (!isDuplicate) {
+        const newChip: FilterChip = {
+          id: Math.random().toString(36).substring(2, 9),
+          field: stagedSearchField,
+          value: pendingVal,
+        }
+        currentChips.push(newChip)
+        setStagedChips(currentChips)
+        setStagedSearchTerm("")
+      }
+    }
+
+    setAppliedChips(currentChips)
     setAppliedTypeFilter(stagedTypeFilter)
-    setAppliedStartDateFilter(stagedStartDateFilter)
-    setAppliedEndDateFilter(stagedEndDateFilter)
+    setAppliedDateRange(stagedDateRange)
+    setShowSuggestions(false)
   }
 
   const handleClearFilters = () => {
-    setStagedDeviceIdFilter("ALL")
+    setStagedChips([])
     setStagedSearchTerm("")
-    setStagedSearchField("all")
+    setStagedSearchField("device_id")
     setStagedTypeFilter("ALL")
-    setStagedStartDateFilter(undefined)
-    setStagedEndDateFilter(undefined)
+    setStagedDateRange(undefined)
 
-    setAppliedDeviceIdFilter("ALL")
-    setAppliedSearchTerm("")
-    setAppliedSearchField("all")
+    setAppliedChips([])
     setAppliedTypeFilter("ALL")
-    setAppliedStartDateFilter(undefined)
-    setAppliedEndDateFilter(undefined)
+    setAppliedDateRange(undefined)
+    setShowSuggestions(false)
   }
 
   const supabase = createClient()
@@ -371,35 +461,40 @@ export function EventsClient() {
     return () => clearInterval(interval)
   }, [fetchSupabaseData, refreshInterval])
 
-  // Filter events by Device ID & Search input
+  // Filter events by Active Filter Chips
   const filteredEvents = React.useMemo(() => {
     return events.filter(evt => {
-      // 1. Device ID filter (e.g. RM0007)
-      if (appliedDeviceIdFilter !== "ALL" && evt.device_id !== appliedDeviceIdFilter) {
-        return false
+      // 1. Check all Applied Filter Chips (AND logic)
+      for (const chip of appliedChips) {
+        const val = chip.value.toLowerCase().trim()
+        if (!val) continue
+
+        if (chip.field === "device_id") {
+          if (!(evt.device_id || "").toLowerCase().includes(val)) return false
+        } else if (chip.field === "hostname") {
+          if (!(evt.details?.device_context?.hostname || "").toLowerCase().includes(val)) return false
+        } else if (chip.field === "device") {
+          if (!(evt.details?.device_context?.device_id || "").toLowerCase().includes(val)) return false
+        } else if (chip.field === "device_type") {
+          if (!(evt.details?.device_context?.device_type || "").toLowerCase().includes(val)) return false
+        } else if (chip.field === "id") {
+          if (!(evt.id || "").toLowerCase().includes(val)) return false
+        } else {
+          // text / all fields match
+          const textMatch =
+            (evt.device_id || "").toLowerCase().includes(val) ||
+            (evt.id || "").toLowerCase().includes(val) ||
+            (evt.details?.device_context?.hostname || "").toLowerCase().includes(val) ||
+            (evt.details?.device_context?.device_id || "").toLowerCase().includes(val) ||
+            (evt.details?.device_context?.device_type || "").toLowerCase().includes(val) ||
+            JSON.stringify(evt.details || {}).toLowerCase().includes(val)
+          if (!textMatch) return false
+        }
       }
 
-      // 2. Search term filter across specified field
-      const query = appliedSearchTerm.toLowerCase().trim()
-      if (!query) return true
-
-      const deviceIdMatch = (evt.device_id || "").toLowerCase().includes(query)
-      const idMatch = (evt.id || "").toLowerCase().includes(query)
-      const hostnameMatch = (evt.details?.device_context?.hostname || "").toLowerCase().includes(query)
-      const deviceMatch = (evt.details?.device_context?.device_id || "").toLowerCase().includes(query)
-      const deviceTypeMatch = (evt.details?.device_context?.device_type || "").toLowerCase().includes(query)
-      const rawDetailsMatch = JSON.stringify(evt.details || {}).toLowerCase().includes(query)
-
-      if (appliedSearchField === "device_id") return deviceIdMatch
-      if (appliedSearchField === "hostname") return hostnameMatch
-      if (appliedSearchField === "device") return deviceMatch
-      if (appliedSearchField === "device_type") return deviceTypeMatch
-      if (appliedSearchField === "id") return idMatch
-
-      // Default "all": match any field or raw details
-      return deviceIdMatch || idMatch || hostnameMatch || deviceMatch || deviceTypeMatch || rawDetailsMatch
+      return true
     })
-  }, [events, appliedDeviceIdFilter, appliedSearchTerm, appliedSearchField])
+  }, [events, appliedChips])
 
   // Paginate filtered events
   const paginatedEvents = React.useMemo(() => {
@@ -653,65 +748,108 @@ export function EventsClient() {
         {/* Supabase Table Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/5 border-b border-border text-xs select-none">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Search Filter using ButtonGroup */}
-            <ButtonGroup>
-              <Select
-                value={stagedSearchField}
-                onValueChange={(val) => setStagedSearchField(val as any)}
-              >
-                <SelectTrigger className="h-8 text-xs font-mono font-medium bg-muted/20 border-border text-foreground">
-                  <Search className="size-3.5 text-muted-foreground shrink-0 mr-1" />
-                  <SelectValue placeholder="Field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">all fields</SelectItem>
-                  <SelectItem value="device_id">device_id</SelectItem>
-                  <SelectItem value="device_type">device_type</SelectItem>
-                  <SelectItem value="hostname">hostname</SelectItem>
-                  <SelectItem value="device">device</SelectItem>
-                  <SelectItem value="id">event (id)</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                type="text"
-                placeholder={`Filter by ${stagedSearchField}...`}
-                value={stagedSearchTerm}
-                onChange={(e) => setStagedSearchTerm(e.target.value)}
-                className="h-8 text-xs w-44 sm:w-60 bg-background"
-              />
-              {stagedSearchTerm && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setStagedSearchTerm("")}
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title="Clear search"
+            {/* Intelligent Chip-based Search Bar matching exact filter UI design */}
+            <div className="relative flex items-center shrink-0">
+              <ButtonGroup className="h-8">
+                {/* Field Selector Dropdown */}
+                <Select
+                  value={stagedSearchField}
+                  onValueChange={(val) => {
+                    setStagedSearchField(val as any)
+                    setShowSuggestions(true)
+                  }}
                 >
-                  <X className="size-3.5" />
-                </Button>
-              )}
-            </ButtonGroup>
+                  <SelectTrigger className="h-8 text-xs font-mono font-medium bg-background hover:bg-muted/30 border border-border border-r-0 rounded-r-none text-foreground px-2.5 focus:ring-0 focus:ring-offset-0 shrink-0">
+                    <Search className="size-3.5 text-muted-foreground shrink-0 mr-1" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="device_id">device_id</SelectItem>
+                    <SelectItem value="device_type">device_type</SelectItem>
+                    <SelectItem value="hostname">hostname</SelectItem>
+                    <SelectItem value="device">device</SelectItem>
+                    <SelectItem value="id">event (id)</SelectItem>
+                    <SelectItem value="text">text</SelectItem>
+                  </SelectContent>
+                </Select>
 
-            {/* Device ID Filter */}
-            <Select
-              value={stagedDeviceIdFilter}
-              onValueChange={(val) => setStagedDeviceIdFilter(val || "ALL")}
-            >
-              <SelectTrigger className="flex items-center gap-1.5 px-2.5 border border-border bg-background hover:bg-muted/30 rounded-md h-8 text-xs text-foreground font-medium cursor-pointer transition-all shadow-none focus:ring-0 focus:ring-offset-0">
-                <Laptop className="size-3.5 text-muted-foreground/60 shrink-0" />
-                <SelectValue placeholder="All Devices">
-                  {stagedDeviceIdFilter === "ALL" ? "All Devices" : `Device: ${stagedDeviceIdFilter}`}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Devices</SelectItem>
-                {uniqueDeviceIds.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                {/* Input & Chips Box */}
+                <div className="flex items-center gap-1.5 px-2 bg-background border border-border border-l-0 rounded-r-md h-8 min-w-[240px] max-w-md focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all">
+                  {/* Active Filter Chips */}
+                  {stagedChips.map((chip) => (
+                    <span
+                      key={chip.id}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono bg-muted text-foreground border border-border shrink-0"
+                    >
+                      <span className="font-semibold text-muted-foreground uppercase text-[9px]">{chip.field}:</span>
+                      <span className="font-medium max-w-[100px] truncate">{chip.value}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveChip(chip.id)}
+                        className="hover:bg-muted-foreground/20 p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                        title="Remove chip"
+                      >
+                        <X className="size-2.5" />
+                      </button>
+                    </span>
+                  ))}
+
+                  {/* Input field */}
+                  <input
+                    type="text"
+                    placeholder={stagedChips.length > 0 ? "Add filter..." : `Filter by ${stagedSearchField}...`}
+                    value={stagedSearchTerm}
+                    onFocus={() => setShowSuggestions(true)}
+                    onChange={(e) => {
+                      setStagedSearchTerm(e.target.value)
+                      setShowSuggestions(true)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleAddChip()
+                      } else if (e.key === "Backspace" && !stagedSearchTerm && stagedChips.length > 0) {
+                        handleRemoveChip(stagedChips[stagedChips.length - 1].id)
+                      }
+                    }}
+                    className="h-full text-xs bg-transparent border-0 outline-none flex-1 font-mono text-foreground placeholder:text-muted-foreground/50 min-w-[80px]"
+                  />
+
+                  {stagedSearchTerm.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddChip()}
+                      className="h-5 px-1.5 text-[10px] font-mono font-medium bg-muted hover:bg-muted/80 text-foreground border border-border rounded cursor-pointer shrink-0 transition-colors"
+                      title="Add filter chip (Press Enter)"
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </ButtonGroup>
+
+              {/* Autocomplete Suggestions Popover */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div
+                  className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-md z-50 py-1 font-mono text-xs max-h-48 overflow-y-auto custom-scrollbar"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <div className="px-2.5 py-1 text-[10px] uppercase font-semibold text-muted-foreground/70 border-b border-border/50">
+                    Suggested {stagedSearchField}s
+                  </div>
+                  {suggestions.map((sug) => (
+                    <div
+                      key={sug}
+                      onClick={() => handleAddChip(stagedSearchField, sug)}
+                      className="px-2.5 py-1.5 hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center justify-between text-xs"
+                    >
+                      <span className="font-mono">{sug}</span>
+                      <span className="text-[10px] text-muted-foreground">+ Add chip</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Event Type Filter */}
             <Select
@@ -736,20 +874,98 @@ export function EventsClient() {
               </SelectContent>
             </Select>
 
-            {/* Date Range Picker using Shadcn Calendar and Popover */}
-            <div className="flex items-center gap-1.5">
-              <DateTimePicker
-                date={stagedStartDateFilter}
-                setDate={setStagedStartDateFilter}
-                label="Start Date & Time"
+            {/* Date & Time Range Picker with 2 Side-by-Side Calendars & Time Inputs */}
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-8 px-2.5 text-xs border border-border bg-background hover:bg-muted/30 font-medium justify-start text-left shrink-0 cursor-pointer shadow-none",
+                      !stagedDateRange?.from && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="size-3.5 mr-1.5 text-muted-foreground/70 shrink-0" />
+                    {stagedDateRange?.from ? (
+                      stagedDateRange.to ? (
+                        <span className="font-mono text-foreground font-medium">
+                          {format(stagedDateRange.from, "LLL dd, y HH:mm")} – {format(stagedDateRange.to, "LLL dd, y HH:mm")}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-foreground font-medium">
+                          {format(stagedDateRange.from, "LLL dd, y HH:mm")}
+                        </span>
+                      )
+                    ) : (
+                      <span>Pick Date & Time Range</span>
+                    )}
+                  </Button>
+                }
               />
-              <span className="text-xs text-muted-foreground/60 select-none">to</span>
-              <DateTimePicker
-                date={stagedEndDateFilter}
-                setDate={setStagedEndDateFilter}
-                label="End Date & Time"
-              />
-            </div>
+              <PopoverContent className="w-auto p-0" align="start">
+                <div className="p-2 border-b border-border flex items-center justify-between bg-muted/20">
+                  <span className="text-xs font-semibold text-foreground px-2">Select Date & Time Range</span>
+                  {stagedDateRange?.from && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStagedDateRange(undefined)}
+                      className="h-6 text-[11px] text-muted-foreground hover:text-foreground px-2"
+                    >
+                      Clear range
+                    </Button>
+                  )}
+                </div>
+                <Calendar
+                  mode="range"
+                  defaultMonth={stagedDateRange?.from}
+                  selected={stagedDateRange}
+                  onSelect={setStagedDateRange}
+                  numberOfMonths={2}
+                />
+                {/* Time Selection Inputs Footer */}
+                <div className="p-2.5 border-t border-border bg-muted/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-medium text-foreground">Start:</span>
+                    <input
+                      type="time"
+                      disabled={!stagedDateRange?.from}
+                      value={formatTimeToHHMM(stagedDateRange?.from)}
+                      onChange={(e) => {
+                        if (!stagedDateRange?.from) return
+                        const updatedFrom = setTimeToDate(stagedDateRange.from, e.target.value)
+                        setStagedDateRange({
+                          from: updatedFrom,
+                          to: stagedDateRange.to,
+                        })
+                      }}
+                      className="h-7 text-xs font-mono bg-background border border-border rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-medium text-foreground">End:</span>
+                    <input
+                      type="time"
+                      disabled={!stagedDateRange?.to}
+                      value={formatTimeToHHMM(stagedDateRange?.to)}
+                      onChange={(e) => {
+                        if (!stagedDateRange?.to) return
+                        const updatedTo = setTimeToDate(stagedDateRange.to, e.target.value)
+                        setStagedDateRange({
+                          from: stagedDateRange.from,
+                          to: updatedTo,
+                        })
+                      }}
+                      className="h-7 text-xs font-mono bg-background border border-border rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* Columns Select Dropdown */}
             <div className="relative">
@@ -1247,105 +1463,140 @@ export function EventsClient() {
             <div className="flex-1 overflow-y-auto p-5 text-left">
               {activeDetailTab === "overview" && (
                 <div className="space-y-6">
-                  {/* Title Header */}
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground font-mono">
-                      {selectedEvent.details.device_context?.hostname || selectedEvent.device_id}
-                    </h2>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-muted-foreground font-mono">
-                        {selectedEvent.details.device_context?.ip_address || "No IP Address"}
+                  {/* Top Event Metadata Banner */}
+                  <div className="p-3 border border-border rounded-lg bg-muted/10 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="bg-muted px-2 py-0.5 rounded text-[11px] font-mono border border-border font-medium text-foreground">
+                        {getEventTypeName(selectedEvent.type)}
                       </span>
-                      {selectedEvent.details.device_context?.ip_address && (
-                        <button
-                          onClick={() => handleCopyText(selectedEvent.details.device_context?.ip_address || "")}
-                          className="p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer"
-                          title="Copy IP Address"
-                        >
-                          {copiedText === selectedEvent.details.device_context?.ip_address ? (
-                            <Check className="size-3 text-primary" />
-                          ) : (
-                            <Copy className="size-3" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <hr className="border-border/60" />
-
-                  {/* Attributes Grid List */}
-                  <div className="space-y-3.5 text-xs">
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Event UID</span>
-                      <span className="font-mono text-[10px] text-foreground font-semibold select-all">
-                        {selectedEvent.id}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Timestamp</span>
-                      <span className="font-medium text-foreground font-mono">
+                      <span className="text-[11px] font-mono text-muted-foreground">
                         {formatDateString(selectedEvent.timestamp, selectedTimezone)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Event Type</span>
-                      <span className="font-medium text-foreground bg-muted/80 px-2 py-0.5 rounded border">
-                        {getEventTypeName(selectedEvent.type)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Platform</span>
-                      <span className="font-medium text-foreground">
-                        {selectedEvent.details.content?.platform || "-"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Content Title</span>
-                      <span className="font-medium text-foreground truncate max-w-[260px] text-right" title={selectedEvent.details.content?.title}>
-                        {selectedEvent.details.content?.title || "-"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">OS / Client</span>
-                      <span className="font-medium text-foreground">
-                        {selectedEvent.details.device_context?.os || "-"} ({selectedEvent.details.device_context?.device_type || "-"})
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/30 pb-2">
-                      <span className="text-muted-foreground">Audio Language</span>
-                      <span className="font-medium text-foreground">
-                        {selectedEvent.details.content?.audio_language || "-"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pb-1">
-                      <span className="text-muted-foreground">SSO Provider</span>
-                      <span className="font-medium text-foreground flex items-center gap-1">
-                        <Check className="size-3.5 text-primary bg-primary/10 rounded-full p-0.5" />
-                        <span>Connected</span>
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
+                      <span className="text-muted-foreground font-mono">Event ID:</span>
+                      <span className="font-mono text-[11px] text-foreground font-semibold select-all">
+                        {selectedEvent.id}
                       </span>
                     </div>
                   </div>
 
-                  <hr className="border-border/60" />
-
-                  {/* Provider Information Section */}
+                  {/* 1. DEVICE CONTEXT SECTION */}
                   <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-                      Provider Information
-                    </h3>
-                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/10">
-                      <div className="p-2 bg-primary/10 text-primary rounded-md">
-                        <Server className="size-4" />
-                      </div>
-                      <div className="flex flex-col text-left">
-                        <span className="font-semibold text-xs text-foreground">
-                          {selectedEvent.details.content?.platform || "Router Meter Engine"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          API Stream Identifier: {selectedEvent.details.household_context?.router_id || "RM0002"}
+                    <div className="flex items-center gap-2 border-b border-border pb-2">
+                      <Laptop className="size-4 text-primary" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
+                        Device Context
+                      </h3>
+                    </div>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Device ID</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {selectedEvent.details.device_context?.device_id || selectedEvent.device_id || "-"}
                         </span>
                       </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Device Type</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.device_context?.device_type || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Hostname</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {selectedEvent.details.device_context?.hostname || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">OS / Client</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.device_context?.os || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">IP Address</span>
+                        <span className="font-mono text-foreground font-medium flex items-center gap-1">
+                          <span>{selectedEvent.details.device_context?.ip_address || "-"}</span>
+                          {selectedEvent.details.device_context?.ip_address && (
+                            <button
+                              onClick={() => handleCopyText(selectedEvent.details.device_context?.ip_address || "")}
+                              className="p-0.5 text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer"
+                              title="Copy IP Address"
+                            >
+                              {copiedText === selectedEvent.details.device_context?.ip_address ? (
+                                <Check className="size-3 text-primary" />
+                              ) : (
+                                <Copy className="size-3" />
+                              )}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pb-1">
+                        <span className="text-muted-foreground">MAC Address</span>
+                        <span className="font-mono text-foreground font-medium">
+                          {selectedEvent.details.device_context?.mac_address || "-"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. CONTENT CONTEXT SECTION */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 border-b border-border pb-2">
+                      <Server className="size-4 text-primary" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
+                        Content Context
+                      </h3>
+                    </div>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Content Title</span>
+                        <span className="font-medium text-foreground truncate max-w-[260px] text-right" title={selectedEvent.details.content?.title}>
+                          {selectedEvent.details.content?.title || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Platform</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.content?.platform || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Content Type</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.content?.content_type || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Genre</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.content?.genre || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Audio Language</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.content?.audio_language || "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/30 pb-2">
+                        <span className="text-muted-foreground">Live Stream</span>
+                        <span className="font-medium text-foreground">
+                          {selectedEvent.details.content?.is_live !== undefined
+                            ? (selectedEvent.details.content.is_live ? "Live" : "VOD (On Demand)")
+                            : "-"}
+                        </span>
+                      </div>
+                      {selectedEvent.details.content?.duration_seconds ? (
+                        <div className="flex justify-between items-center pb-1">
+                          <span className="text-muted-foreground">Duration</span>
+                          <span className="font-mono text-foreground">
+                            {selectedEvent.details.content.duration_seconds}s
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>

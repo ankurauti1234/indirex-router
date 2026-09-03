@@ -12,16 +12,13 @@ import {
   Code,
   X,
   Copy,
-  Sparkles,
   RefreshCw,
   Zap,
   Layers,
   Filter,
   Eye,
   Search,
-  CheckCircle2,
   FileCode,
-  ShieldCheck,
   Activity,
   ArrowRight,
 } from "lucide-react"
@@ -371,7 +368,6 @@ export function RulesClient() {
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-1">{t.description}</p>
                       </div>
-                      <Sparkles className={`size-3.5 text-primary shrink-0 transition-opacity mt-0.5 ${isSelected ? "opacity-100" : "opacity-0"}`} />
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/40 font-mono">
