@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Zap, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { cn, getURL } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 
@@ -58,7 +58,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/oauth?next=/`,
+          redirectTo: getURL('/oauth?next=/'),
         },
       })
       if (error) throw error

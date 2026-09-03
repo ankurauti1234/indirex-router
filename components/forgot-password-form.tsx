@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Zap, AlertCircle, CheckCircle2, Loader2, ArrowLeft } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { cn, getURL } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 
@@ -22,7 +22,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/update-password`,
+        redirectTo: getURL('/update-password'),
       })
       if (error) throw error
       setSuccess(true)

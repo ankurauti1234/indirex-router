@@ -1,17 +1,21 @@
 import { NextResponse } from 'next/server'
-
-// The client you created from the Server-Side Auth instructions
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  // if "next" is in param, use it as the redirect URL
   let next = searchParams.get('next') ?? '/'
   if (!next.startsWith('/')) {
-    // if "next" is not a relative URL, use the default
     next = '/'
   }
+
+  // Determine external host for Vercel vs localhost
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
+  const isLocalEnv = process.env.NODE_ENV === 'development'
+  const baseUrl = (!isLocalEnv && forwardedHost)
+    ? `${forwardedProto}://${forwardedHost}`
+    : origin
 
   if (code) {
     const supabase = await createClient()
@@ -20,22 +24,13 @@ export async function GET(request: Request) {
       const { data: { user } } = await supabase.auth.getUser()
       if (user?.email && !user.email.endsWith('@inditronics.com')) {
         await supabase.auth.signOut()
-        return NextResponse.redirect(`${origin}/error?error=Only @inditronics.com email addresses are allowed.`)
+        return NextResponse.redirect(`${baseUrl}/error?error=Only @inditronics.com email addresses are allowed.`)
       }
 
-      const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
-      const isLocalEnv = process.env.NODE_ENV === 'development'
-      if (isLocalEnv) {
-        // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
-        return NextResponse.redirect(`${origin}${next}`)
-      } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`)
-      } else {
-        return NextResponse.redirect(`${origin}${next}`)
-      }
+      return NextResponse.redirect(`${baseUrl}${next}`)
     }
   }
 
-  // return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/error`)
+  // return the user to an error page if code is missing or exchange failed
+  return NextResponse.redirect(`${baseUrl}/error?error=Authentication failed. Please try logging in again.`)
 }
