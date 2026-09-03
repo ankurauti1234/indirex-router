@@ -141,15 +141,17 @@ export function EventsClient() {
   const [selectedEvent, setSelectedEvent] = React.useState<EventLog | null>(null)
   
   // Search & Filter Settings (Staging)
+  const [stagedDeviceIdFilter, setStagedDeviceIdFilter] = React.useState<string>("ALL")
   const [stagedSearchTerm, setStagedSearchTerm] = React.useState("")
-  const [stagedSearchField, setStagedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device" | "device_type">("device_id")
+  const [stagedSearchField, setStagedSearchField] = React.useState<"all" | "device_id" | "id" | "hostname" | "device" | "device_type">("all")
   const [stagedTypeFilter, setStagedTypeFilter] = React.useState<string>("ALL")
   const [stagedStartDateFilter, setStagedStartDateFilter] = React.useState<Date | undefined>(undefined)
   const [stagedEndDateFilter, setStagedEndDateFilter] = React.useState<Date | undefined>(undefined)
 
   // Active/Applied Filter Settings
+  const [appliedDeviceIdFilter, setAppliedDeviceIdFilter] = React.useState<string>("ALL")
   const [appliedSearchTerm, setAppliedSearchTerm] = React.useState("")
-  const [appliedSearchField, setAppliedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device" | "device_type">("device_id")
+  const [appliedSearchField, setAppliedSearchField] = React.useState<"all" | "device_id" | "id" | "hostname" | "device" | "device_type">("all")
   const [appliedTypeFilter, setAppliedTypeFilter] = React.useState<string>("ALL")
   const [appliedStartDateFilter, setAppliedStartDateFilter] = React.useState<Date | undefined>(undefined)
   const [appliedEndDateFilter, setAppliedEndDateFilter] = React.useState<Date | undefined>(undefined)
@@ -161,10 +163,16 @@ export function EventsClient() {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [itemsPerPage, setItemsPerPage] = React.useState(25)
 
+  // Dynamic unique list of Device IDs extracted from loaded telemetry events
+  const uniqueDeviceIds = React.useMemo(() => {
+    const ids = events.map(e => e.device_id).filter(Boolean)
+    return Array.from(new Set(ids)).sort()
+  }, [events])
+
   // Reset page when filters change
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [appliedSearchTerm, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
+  }, [appliedDeviceIdFilter, appliedSearchTerm, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
 
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = React.useState({
@@ -184,6 +192,7 @@ export function EventsClient() {
   const [copiedText, setCopiedText] = React.useState<string | null>(null)
 
   const hasChanges = 
+    stagedDeviceIdFilter !== appliedDeviceIdFilter ||
     stagedSearchTerm !== appliedSearchTerm ||
     stagedSearchField !== appliedSearchField ||
     stagedTypeFilter !== appliedTypeFilter ||
@@ -191,12 +200,14 @@ export function EventsClient() {
     stagedEndDateFilter?.getTime() !== appliedEndDateFilter?.getTime()
 
   const isFilterApplied = 
+    appliedDeviceIdFilter !== "ALL" ||
     appliedSearchTerm !== "" ||
     appliedTypeFilter !== "ALL" ||
     appliedStartDateFilter !== undefined ||
     appliedEndDateFilter !== undefined
 
   const handleApplyFilters = () => {
+    setAppliedDeviceIdFilter(stagedDeviceIdFilter)
     setAppliedSearchTerm(stagedSearchTerm)
     setAppliedSearchField(stagedSearchField)
     setAppliedTypeFilter(stagedTypeFilter)
@@ -205,14 +216,16 @@ export function EventsClient() {
   }
 
   const handleClearFilters = () => {
+    setStagedDeviceIdFilter("ALL")
     setStagedSearchTerm("")
-    setStagedSearchField("device_id")
+    setStagedSearchField("all")
     setStagedTypeFilter("ALL")
     setStagedStartDateFilter(undefined)
     setStagedEndDateFilter(undefined)
 
+    setAppliedDeviceIdFilter("ALL")
     setAppliedSearchTerm("")
-    setAppliedSearchField("device_id")
+    setAppliedSearchField("all")
     setAppliedTypeFilter("ALL")
     setAppliedStartDateFilter(undefined)
     setAppliedEndDateFilter(undefined)
@@ -235,7 +248,6 @@ export function EventsClient() {
       if (!typesRes.error && typesData) {
         const formatted: EventType[] = typesData.map((d: any) => {
           const rule = rulesData.find((r: any) => r.type_id === d.type)
-          
           const descText = d.description || "No description set"
           const templateText = rule?.template || undefined
           const fieldRules = Array.isArray(rule?.field_rules)
@@ -246,7 +258,7 @@ export function EventsClient() {
             id: d.type,
             name: d.name || `TYPE_${d.type}`,
             description: descText,
-            is_active: true,
+            is_active: d.is_active !== undefined ? d.is_active : true,
             structure: rule?.structure || null,
             sample: rule?.sample || null,
             template: templateText,
@@ -256,43 +268,98 @@ export function EventsClient() {
         setEventTypes(formatted)
       }
 
-      // 2. Fetch Telemetry Events
-      let query = supabase.from("playback_events").select("*")
-      
-      if (appliedTypeFilter !== "ALL") {
-        query = query.eq("type", parseInt(appliedTypeFilter))
-      }
-      if (appliedStartDateFilter) {
-        query = query.gte("timestamp", appliedStartDateFilter.toISOString())
-      }
-      if (appliedEndDateFilter) {
-        query = query.lte("timestamp", appliedEndDateFilter.toISOString())
+      // 2. Fetch ALL Telemetry Events from "playback_events" table in 1000-row chunks to bypass PostgREST limits
+      let eventsData: any[] = []
+      let pageIndex = 0
+      const pageSize = 1000
+      let hasMore = true
+      let fetchError = false
+
+      while (hasMore) {
+        let query = supabase.from("playback_events").select("*")
+
+        if (appliedTypeFilter !== "ALL") {
+          query = query.eq("type", parseInt(appliedTypeFilter, 10))
+        }
+        if (appliedStartDateFilter) {
+          query = query.gte("timestamp", appliedStartDateFilter.toISOString())
+        }
+        if (appliedEndDateFilter) {
+          query = query.lte("timestamp", appliedEndDateFilter.toISOString())
+        }
+
+        const { data, error } = await query
+          .order("timestamp", { ascending: false })
+          .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1)
+
+        if (error) {
+          console.error("Error fetching events chunk:", error)
+          fetchError = true
+          hasMore = false
+        } else if (data && data.length > 0) {
+          eventsData.push(...data)
+          if (data.length < pageSize) {
+            hasMore = false
+          } else {
+            pageIndex++
+          }
+        } else {
+          hasMore = false
+        }
       }
 
-      const { data: eventsData, error: eventsError } = await query.order("timestamp", { ascending: false })
+      if (!fetchError && eventsData.length > 0) {
+        const parseTimestampToUnix = (tsVal: any): number => {
+          if (typeof tsVal === "number") {
+            return tsVal < 1e11 ? tsVal : Math.floor(tsVal / 1000)
+          }
+          if (!tsVal) return Math.floor(Date.now() / 1000)
+          
+          let str = String(tsVal).trim()
+          if (str.includes(" ") && !str.includes("T")) {
+            str = str.replace(" ", "T")
+          }
+          const parsedMs = new Date(str).getTime()
+          return isNaN(parsedMs) ? Math.floor(Date.now() / 1000) : Math.floor(parsedMs / 1000)
+        }
 
-      if (!eventsError && eventsData) {
-        const formatted: EventLog[] = eventsData.map((d: any) => ({
-          id: d.id,
-          device_id: d.device_id,
-          timestamp: Math.floor(new Date(d.timestamp).getTime() / 1000),
-          type: d.type,
-          details: d.details || {},
-        }))
+        const formatted: EventLog[] = eventsData.map((d: any) => {
+          let detailsObj: any = {}
+          if (typeof d.details === "string") {
+            try {
+              detailsObj = JSON.parse(d.details)
+            } catch {
+              detailsObj = {}
+            }
+          } else if (d.details && typeof d.details === "object") {
+            detailsObj = d.details
+          }
+
+          return {
+            id: String(d.id),
+            device_id: String(d.device_id || ""),
+            timestamp: parseTimestampToUnix(d.timestamp),
+            type: typeof d.type === "number" ? d.type : parseInt(d.type || "0", 10),
+            details: detailsObj,
+          }
+        })
+
+        // Sort descending by timestamp
+        formatted.sort((a, b) => b.timestamp - a.timestamp)
         setEvents(formatted)
       } else {
         setEvents([])
       }
     } catch (e) {
+      console.error(e)
       setEvents([])
     }
-  }, [appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
+  }, [supabase, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
 
   // Trigger manual refresh
   const handleRefresh = async () => {
     setIsRefreshing(true)
     await fetchSupabaseData()
-    // Simulated spinning delay for premium interaction feel
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
@@ -304,31 +371,35 @@ export function EventsClient() {
     return () => clearInterval(interval)
   }, [fetchSupabaseData, refreshInterval])
 
-  // Filter events by Search input and Active Mappings
+  // Filter events by Device ID & Search input
   const filteredEvents = React.useMemo(() => {
-    const isTypeActive = (typeId: number) => {
-      const matched = eventTypes.find(t => t.id === typeId)
-      return matched ? matched.is_active !== false : true
-    }
+    return events.filter(evt => {
+      // 1. Device ID filter (e.g. RM0007)
+      if (appliedDeviceIdFilter !== "ALL" && evt.device_id !== appliedDeviceIdFilter) {
+        return false
+      }
 
-    return events
-      .filter(evt => isTypeActive(evt.type))
-      .filter(evt => {
-        const query = appliedSearchTerm.toLowerCase().trim()
-        if (!query) return true
-        if (appliedSearchField === "device_id") {
-          return evt.device_id.toLowerCase().includes(query)
-        } else if (appliedSearchField === "hostname") {
-          return (evt.details?.device_context?.hostname || "").toLowerCase().includes(query)
-        } else if (appliedSearchField === "device") {
-          return (evt.details?.device_context?.device_id || "").toLowerCase().includes(query)
-        } else if (appliedSearchField === "device_type") {
-          return (evt.details?.device_context?.device_type || "").toLowerCase().includes(query)
-        } else {
-          return evt.id.toLowerCase().includes(query)
-        }
-      })
-  }, [events, appliedSearchTerm, appliedSearchField, eventTypes])
+      // 2. Search term filter across specified field
+      const query = appliedSearchTerm.toLowerCase().trim()
+      if (!query) return true
+
+      const deviceIdMatch = (evt.device_id || "").toLowerCase().includes(query)
+      const idMatch = (evt.id || "").toLowerCase().includes(query)
+      const hostnameMatch = (evt.details?.device_context?.hostname || "").toLowerCase().includes(query)
+      const deviceMatch = (evt.details?.device_context?.device_id || "").toLowerCase().includes(query)
+      const deviceTypeMatch = (evt.details?.device_context?.device_type || "").toLowerCase().includes(query)
+      const rawDetailsMatch = JSON.stringify(evt.details || {}).toLowerCase().includes(query)
+
+      if (appliedSearchField === "device_id") return deviceIdMatch
+      if (appliedSearchField === "hostname") return hostnameMatch
+      if (appliedSearchField === "device") return deviceMatch
+      if (appliedSearchField === "device_type") return deviceTypeMatch
+      if (appliedSearchField === "id") return idMatch
+
+      // Default "all": match any field or raw details
+      return deviceIdMatch || idMatch || hostnameMatch || deviceMatch || deviceTypeMatch || rawDetailsMatch
+    })
+  }, [events, appliedDeviceIdFilter, appliedSearchTerm, appliedSearchField])
 
   // Paginate filtered events
   const paginatedEvents = React.useMemo(() => {
@@ -593,10 +664,11 @@ export function EventsClient() {
                   <SelectValue placeholder="Field" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">all fields</SelectItem>
                   <SelectItem value="device_id">device_id</SelectItem>
+                  <SelectItem value="device_type">device_type</SelectItem>
                   <SelectItem value="hostname">hostname</SelectItem>
                   <SelectItem value="device">device</SelectItem>
-                  <SelectItem value="device_type">device_type</SelectItem>
                   <SelectItem value="id">event (id)</SelectItem>
                 </SelectContent>
               </Select>
@@ -619,6 +691,27 @@ export function EventsClient() {
                 </Button>
               )}
             </ButtonGroup>
+
+            {/* Device ID Filter */}
+            <Select
+              value={stagedDeviceIdFilter}
+              onValueChange={(val) => setStagedDeviceIdFilter(val || "ALL")}
+            >
+              <SelectTrigger className="flex items-center gap-1.5 px-2.5 border border-border bg-background hover:bg-muted/30 rounded-md h-8 text-xs text-foreground font-medium cursor-pointer transition-all shadow-none focus:ring-0 focus:ring-offset-0">
+                <Laptop className="size-3.5 text-muted-foreground/60 shrink-0" />
+                <SelectValue placeholder="All Devices">
+                  {stagedDeviceIdFilter === "ALL" ? "All Devices" : `Device: ${stagedDeviceIdFilter}`}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Devices</SelectItem>
+                {uniqueDeviceIds.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* Event Type Filter */}
             <Select
