@@ -27,7 +27,7 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: getURL('/oauth?next=/'),
+          redirectTo: getURL('/oauth?next=/dashboard'),
         },
       })
       if (error) throw error
@@ -54,7 +54,7 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
         email,
         password,
         options: {
-          emailRedirectTo: getURL('/'),
+          emailRedirectTo: getURL('/dashboard'),
         },
       })
       if (error) throw error

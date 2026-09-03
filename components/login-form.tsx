@@ -39,7 +39,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       if (typeof window !== 'undefined') {
         localStorage.setItem('last_login_provider', 'password')
       }
-      router.push('/')
+      router.push('/dashboard')
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
@@ -58,7 +58,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: getURL('/oauth?next=/'),
+          redirectTo: getURL('/oauth?next=/dashboard'),
         },
       })
       if (error) throw error

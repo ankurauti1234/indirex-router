@@ -26,9 +26,9 @@ export default async function ProtectedLayout({
     <div className="[--header-height:calc(--spacing(14))]">
       <SidebarProvider>
         <AppSidebar user={userData} />
-        <SidebarInset className="flex flex-col min-h-svh">
+        <SidebarInset className="flex flex-col min-h-svh min-w-0">
           <SiteHeader user={userData} />
-          <div className="flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col min-w-0">
             {children}
           </div>
         </SidebarInset>

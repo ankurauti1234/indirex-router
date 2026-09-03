@@ -14,7 +14,7 @@ export function PageContainer({
   children,
 }: PageContainerProps) {
   return (
-    <div className="flex flex-1 flex-col gap-5 p-6 font-sans">
+    <div className="flex flex-1 flex-col gap-5 p-6 font-sans min-w-0 max-w-full">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold tracking-tight text-foreground font-sans">
           {title}

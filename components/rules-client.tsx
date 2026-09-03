@@ -18,6 +18,12 @@ import {
   Layers,
   Filter,
   Eye,
+  Search,
+  CheckCircle2,
+  FileCode,
+  ShieldCheck,
+  Activity,
+  ArrowRight,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PageContainer } from "./page-container"
@@ -25,8 +31,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   ButtonGroup,
-  ButtonGroupText,
-  ButtonGroupSeparator,
 } from "@/components/ui/button-group"
 import {
   Select,
@@ -51,6 +55,7 @@ export function RulesClient() {
   const [dbEventTypes, setDbEventTypes] = React.useState<any[]>([])
   const [selectedSchemaType, setSelectedSchemaType] = React.useState<number>(1)
   const [activeSchemaTab, setActiveSchemaTab] = React.useState<"rules" | "generic" | "sample">("rules")
+  const [schemaSearchQuery, setSchemaSearchQuery] = React.useState("")
   
   // Template editing state
   const [editingType, setEditingType] = React.useState<number | null>(null)
@@ -89,7 +94,6 @@ export function RulesClient() {
           const descText = t.description || "No description set"
           const templateText = rule?.template || undefined
 
-          // Extract field rules array from rule.field_rules or fallback to rule.structure._field_rules
           const extractedRules: FieldConditionRule[] = Array.isArray(rule?.field_rules)
             ? rule.field_rules
             : (Array.isArray(rule?.structure?._field_rules) ? rule.structure._field_rules : [])
@@ -133,6 +137,18 @@ export function RulesClient() {
     return fieldRules[selectedSchemaType] || []
   }, [fieldRules, selectedSchemaType])
 
+  // Filtered directory items
+  const filteredEventTypes = React.useMemo(() => {
+    if (!schemaSearchQuery.trim()) return dbEventTypes
+    const q = schemaSearchQuery.toLowerCase()
+    return dbEventTypes.filter(
+      t =>
+        t.name?.toLowerCase().includes(q) ||
+        t.description?.toLowerCase().includes(q) ||
+        t.type.toString().includes(q)
+    )
+  }, [dbEventTypes, schemaSearchQuery])
+
   // Save template and rules to Supabase
   const handleSaveTypeMetadata = async (typeId: number, newTemplate?: string, updatedRules?: FieldConditionRule[]) => {
     setIsUpdating(true)
@@ -157,7 +173,6 @@ export function RulesClient() {
         .upsert(payload, { onConflict: "type_id" })
 
       if (error) {
-        // Fallback if field_rules column does not exist yet on remote table
         delete payload.field_rules
         await supabase
           .from("event_details_rules")
@@ -229,10 +244,8 @@ export function RulesClient() {
     const template = activeSchemaMeta.template
     if (!template) return JSON.stringify(sample, null, 2)
 
-    // Evaluate template interpolation with applied field rules
     let workingDetails = JSON.parse(JSON.stringify(sample))
 
-    // Helper to evaluate value path
     const getValueByPath = (obj: any, pathStr: string) => {
       const parts = pathStr.split(".")
       let curr = obj
@@ -253,7 +266,6 @@ export function RulesClient() {
       curr[parts[parts.length - 1]] = val
     }
 
-    // Apply active rules
     activeFieldRules.forEach(r => {
       if (!r.enabled) return
       const actualVal = getValueByPath(workingDetails, r.field)
@@ -274,7 +286,6 @@ export function RulesClient() {
       }
     })
 
-    // Interpolate template
     return template.replace(/\{([\w.]+)\}/g, (_: string, path: string) => {
       const v = getValueByPath(workingDetails, path)
       return v !== undefined ? String(v) : `{${path}}`
@@ -284,30 +295,56 @@ export function RulesClient() {
   return (
     <PageContainer
       title="Rules & Telemetry Schemas"
-      description="Configure event payload contract structures, define column template strings, and specify item-level conditional display rules."
+      description={
+        <span className="flex flex-wrap gap-2 items-center">
+          <span>Configure event payload contract structures, define column template strings, and specify item-level conditional display rules.</span>
+        </span>
+      }
     >
-      {/* Main Grid: Left side schema directory, Right side schema workspace & rules editor */}
+      {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Side: Directory of Available Schemas */}
-        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-5 shadow-2xs space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Layers className="size-4 text-primary" />
-              Event Schema Directory
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Select an event type below to inspect payload contracts and configure conditional item rules.
-            </p>
+        <div className="lg:col-span-5 bg-card border border-border rounded-lg p-4 shadow-2xs space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <Layers className="size-3.5 text-primary" />
+                Schema Directory
+              </h2>
+              <span className="text-[11px] text-muted-foreground font-mono">
+                {filteredEventTypes.length} types
+              </span>
+            </div>
+            
+            {/* Search Filter for Schemas */}
+            <div className="relative">
+              <Search className="size-3.5 text-muted-foreground/60 absolute left-2.5 top-2.5" />
+              <Input
+                type="text"
+                placeholder="Filter event schemas..."
+                value={schemaSearchQuery}
+                onChange={(e) => setSchemaSearchQuery(e.target.value)}
+                className="h-8 text-xs pl-8 bg-background border-border"
+              />
+              {schemaSearchQuery && (
+                <button
+                  onClick={() => setSchemaSearchQuery("")}
+                  className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground p-0.5"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {dbEventTypes.length === 0 ? (
-              <div className="text-center py-8 font-mono text-xs text-muted-foreground border border-dashed rounded-lg">
-                No active event mappings retrieved
+          <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar pr-1">
+            {filteredEventTypes.length === 0 ? (
+              <div className="text-center py-8 font-mono text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/10">
+                No matching schemas found
               </div>
             ) : (
-              dbEventTypes.map((t) => {
+              filteredEventTypes.map((t) => {
                 const isSelected = selectedSchemaType === t.type
                 const rulesCount = (fieldRules[t.type] || []).length
 
@@ -318,30 +355,30 @@ export function RulesClient() {
                       setSelectedSchemaType(t.type)
                       setEditingType(null)
                     }}
-                    className={`p-4 border rounded-xl transition-all cursor-pointer ${
+                    className={`p-3 border rounded-md transition-all cursor-pointer select-none ${
                       isSelected
-                        ? "bg-primary/5 border-primary shadow-xs"
-                        : "bg-muted/5 border-border/60 hover:bg-muted/10"
+                        ? "bg-primary/5 border-primary border-l-4 shadow-2xs"
+                        : "bg-card border-border/60 hover:bg-muted/30"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted border border-border/80 px-2 py-0.5 rounded">
-                            Type {t.type}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
+                            TYPE {t.type}
                           </span>
-                          <span className="font-semibold text-sm text-foreground font-mono">{t.name}</span>
+                          <span className="font-semibold text-xs text-foreground font-mono truncate">{t.name}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1.5">{t.description}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-1">{t.description}</p>
                       </div>
-                      <Sparkles className={`size-4 text-primary shrink-0 transition-opacity ${isSelected ? "opacity-100" : "opacity-0"}`} />
+                      <Sparkles className={`size-3.5 text-primary shrink-0 transition-opacity mt-0.5 ${isSelected ? "opacity-100" : "opacity-0"}`} />
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground/80 pt-2 border-t border-border/40 font-mono">
+                    <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/40 font-mono">
                       <span>Template: {t.template ? "Configured" : "None"}</span>
                       {rulesCount > 0 && (
-                        <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-medium">
-                          {rulesCount} active rule{rulesCount > 1 ? "s" : ""}
+                        <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-semibold">
+                          {rulesCount} rule{rulesCount > 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
@@ -352,16 +389,17 @@ export function RulesClient() {
           </div>
         </div>
 
-        {/* Right Side: Interactive Schema Workspace & Advanced Item Rules */}
-        <div className="lg:col-span-7 bg-card border border-border rounded-xl p-5 shadow-2xs space-y-5">
+        {/* Right Side: Interactive Schema Workspace & Rules Editor */}
+        <div className="lg:col-span-7 bg-card border border-border rounded-lg p-5 shadow-2xs space-y-5">
+          
           {/* Header for selected type */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="bg-primary/15 text-primary text-xs px-2 py-0.5 rounded font-mono font-bold">
+                <span className="bg-primary/10 text-primary border border-primary/20 text-xs px-2 py-0.5 rounded font-mono font-bold">
                   Type {selectedSchemaType}
                 </span>
-                <h2 className="text-base font-bold text-foreground font-mono">
+                <h2 className="text-sm font-bold text-foreground font-mono">
                   {currentActiveTypeObj?.name || `TYPE_${selectedSchemaType}`}
                 </h2>
               </div>
@@ -370,44 +408,50 @@ export function RulesClient() {
               </p>
             </div>
 
-            {/* Navigation Tabs using ButtonGroup */}
-            <ButtonGroup className="bg-muted/20 p-0.5 rounded-lg border border-border">
-              <Button
+            {/* Navigation Tabs using  styling */}
+            <div className="flex items-center bg-muted/30 p-1 rounded-md border border-border/60 shrink-0">
+              <button
                 onClick={() => setActiveSchemaTab("rules")}
-                variant={activeSchemaTab === "rules" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 text-xs cursor-pointer font-semibold gap-1.5"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-all ${
+                  activeSchemaTab === "rules"
+                    ? "bg-background text-foreground shadow-2xs border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <Zap className="size-3.5 text-primary" />
                 <span>Field Rules</span>
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={() => setActiveSchemaTab("generic")}
-                variant={activeSchemaTab === "generic" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 text-xs cursor-pointer font-semibold gap-1.5"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-all ${
+                  activeSchemaTab === "generic"
+                    ? "bg-background text-foreground shadow-2xs border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <Code className="size-3.5" />
                 <span>Contract</span>
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={() => setActiveSchemaTab("sample")}
-                variant={activeSchemaTab === "sample" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 text-xs cursor-pointer font-semibold gap-1.5"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-all ${
+                  activeSchemaTab === "sample"
+                    ? "bg-background text-foreground shadow-2xs border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <Eye className="size-3.5" />
                 <span>Sample</span>
-              </Button>
-            </ButtonGroup>
+              </button>
+            </div>
           </div>
 
           {/* Template String Editor */}
-          <div className="bg-muted/10 border border-border rounded-xl p-4 space-y-2">
+          <div className="bg-muted/10 border border-border rounded-lg p-4 space-y-2.5">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
+              <span className="font-semibold text-foreground flex items-center gap-1.5 font-mono">
                 <SlidersHorizontal className="size-3.5 text-primary" />
-                Display Column Template (<code className="font-mono text-[11px] text-muted-foreground">details_column_template</code>)
+                Display Column Template (<code className="text-[11px] text-muted-foreground">details_column_template</code>)
               </span>
               {editingType !== selectedSchemaType && (
                 <Button
@@ -426,36 +470,41 @@ export function RulesClient() {
             </div>
 
             {editingType === selectedSchemaType ? (
-              <ButtonGroup className="w-full">
-                <Input
-                  type="text"
-                  value={editTemplateVal}
-                  onChange={(e) => setEditTemplateVal(e.target.value)}
-                  placeholder="E.g. [content.platform] content.title"
-                  className="h-8 text-xs font-mono bg-background"
-                />
-                <Button
-                  onClick={() => handleSaveTypeMetadata(selectedSchemaType, editTemplateVal)}
-                  disabled={isUpdating}
-                  size="sm"
-                  className="h-8 cursor-pointer font-semibold"
-                >
-                  {isUpdating ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                  <span>Save</span>
-                </Button>
-                <Button
-                  onClick={() => setEditingType(null)}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 cursor-pointer text-muted-foreground hover:text-foreground"
-                >
-                  Cancel
-                </Button>
-              </ButtonGroup>
+              <div className="space-y-2">
+                <ButtonGroup className="w-full">
+                  <Input
+                    type="text"
+                    value={editTemplateVal}
+                    onChange={(e) => setEditTemplateVal(e.target.value)}
+                    placeholder="E.g. [content.platform] content.title"
+                    className="h-8 text-xs font-mono bg-background"
+                  />
+                  <Button
+                    onClick={() => handleSaveTypeMetadata(selectedSchemaType, editTemplateVal)}
+                    disabled={isUpdating}
+                    size="sm"
+                    className="h-8 cursor-pointer font-semibold"
+                  >
+                    {isUpdating ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                    <span>Save</span>
+                  </Button>
+                  <Button
+                    onClick={() => setEditingType(null)}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 cursor-pointer text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </Button>
+                </ButtonGroup>
+                <p className="text-[11px] text-muted-foreground">
+                  Use curly braces to interpolate payload paths, e.g. <code className="text-foreground font-mono font-semibold">&#123;content.title&#125;</code>
+                </p>
+              </div>
             ) : (
-              <div className="font-mono text-xs bg-[#121212] border border-border p-2.5 rounded-lg text-zinc-300 select-all whitespace-pre-wrap break-all flex items-center justify-between">
+              <div className="font-mono text-xs bg-background border border-border p-2.5 rounded-md text-foreground select-all whitespace-pre-wrap break-all flex items-center justify-between">
                 <span>{activeSchemaMeta.template || "-"}</span>
-                <span className="text-[10px] text-zinc-500 font-sans">Interpolated format string</span>
+                <span className="text-[10px] text-muted-foreground font-sans">Interpolated format string</span>
               </div>
             )}
           </div>
@@ -463,14 +512,14 @@ export function RulesClient() {
           {/* TAB 1: Advanced Field-Level Conditional Rules Manager */}
           {activeSchemaTab === "rules" && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5 font-mono">
                     <Filter className="size-3.5 text-primary" />
-                    Field-Level Item Conditions & Value Mappers
+                    Field Conditions & Value Overrides
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Add conditional rules on specific payload items (e.g. if <code className="text-foreground font-mono">content.title = "unknown"</code> then display <span className="text-primary font-medium">"Navigating..."</span>).
+                    Specify item-level mapping rules for event payload parameters.
                   </p>
                 </div>
 
@@ -486,20 +535,18 @@ export function RulesClient() {
 
               {/* Form to add a new condition rule */}
               {showAddConditionForm && (
-                <form onSubmit={handleAddConditionRule} className="border border-border bg-muted/15 rounded-xl p-4 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="flex justify-between items-center pb-2 border-b border-border/40">
-                    <span className="text-xs font-bold text-foreground">
+                <form onSubmit={handleAddConditionRule} className="border border-border bg-muted/20 rounded-lg p-4 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-border">
+                    <span className="text-xs font-bold text-foreground font-mono">
                       New Item Condition Rule for Type {selectedSchemaType}
                     </span>
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
                       onClick={() => setShowAddConditionForm(false)}
-                      className="size-6 text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
                     >
                       <X className="size-3.5" />
-                    </Button>
+                    </button>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -521,7 +568,7 @@ export function RulesClient() {
                         value={newRuleOp}
                         onValueChange={(v) => setNewRuleOp(v as any)}
                       >
-                        <SelectTrigger className="w-full h-8 text-xs cursor-pointer">
+                        <SelectTrigger className="w-full h-8 text-xs cursor-pointer bg-background">
                           <SelectValue placeholder="Operator" />
                         </SelectTrigger>
                         <SelectContent>
@@ -561,22 +608,22 @@ export function RulesClient() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">Badge Style:</span>
+                      <span className="text-xs font-medium text-muted-foreground">Lozenge Badge:</span>
                       <Select
                         value={newRuleBadge}
                         onValueChange={(v) => setNewRuleBadge(v as any)}
                       >
-                        <SelectTrigger className="w-28 h-7 text-xs cursor-pointer">
+                        <SelectTrigger className="w-28 h-7 text-xs cursor-pointer bg-background">
                           <SelectValue placeholder="Badge Color" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="warning">Warning (Yellow)</SelectItem>
-                          <SelectItem value="info">Info (Blue)</SelectItem>
-                          <SelectItem value="success">Success (Green)</SelectItem>
-                          <SelectItem value="destructive">Alert (Red)</SelectItem>
-                          <SelectItem value="default">Default (Gray)</SelectItem>
+                          <SelectItem value="warning">Yellow</SelectItem>
+                          <SelectItem value="info">Blue</SelectItem>
+                          <SelectItem value="success">Green</SelectItem>
+                          <SelectItem value="destructive">Red</SelectItem>
+                          <SelectItem value="default">Gray</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -604,33 +651,33 @@ export function RulesClient() {
               )}
 
               {/* Table of active field rules */}
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {activeFieldRules.length === 0 ? (
-                  <div className="text-center p-8 border border-dashed rounded-xl text-muted-foreground text-xs font-mono">
+                  <div className="text-center p-8 border border-dashed rounded-md text-muted-foreground text-xs font-mono bg-muted/5">
                     No field condition rules defined for Type {selectedSchemaType}. Click "Add Condition" to create one.
                   </div>
                 ) : (
                   activeFieldRules.map((rule) => (
                     <div
                       key={rule.id}
-                      className="flex items-center justify-between p-3.5 border border-border rounded-xl bg-muted/5 hover:bg-muted/10 transition-colors gap-3"
+                      className="flex items-center justify-between p-3 border border-border rounded-md bg-card hover:bg-muted/20 transition-colors gap-3 select-none"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono font-semibold text-foreground bg-muted border px-2 py-0.5 rounded">
                             if {rule.field} {rule.operator} "{rule.value}"
                           </span>
-                          <span className="text-xs text-muted-foreground font-medium">➔</span>
-                          <span className="text-xs font-bold text-foreground">
+                          <ArrowRight className="size-3 text-muted-foreground shrink-0" />
+                          <span className="text-xs font-bold text-foreground font-mono">
                             "{rule.display_text}"
                           </span>
                           {rule.badge_color && (
-                            <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold uppercase ${
-                              rule.badge_color === "warning" ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" :
-                              rule.badge_color === "info" ? "bg-sky-500/10 text-sky-500 border border-sky-500/20" :
-                              rule.badge_color === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" :
-                              rule.badge_color === "destructive" ? "bg-rose-500/10 text-rose-500 border border-rose-500/20" :
-                              "bg-muted text-muted-foreground border"
+                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                              rule.badge_color === "warning" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" :
+                              rule.badge_color === "info" ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30" :
+                              rule.badge_color === "success" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" :
+                              rule.badge_color === "destructive" ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30" :
+                              "bg-muted text-muted-foreground border border-border"
                             }`}>
                               {rule.badge_color}
                             </span>
@@ -642,22 +689,22 @@ export function RulesClient() {
                         <Button
                           onClick={() => handleToggleConditionRule(rule.id)}
                           variant="ghost"
-                          size="icon"
-                          className="size-7 cursor-pointer"
+                          size="icon-sm"
+                          className="h-7 w-7 cursor-pointer"
                           title={rule.enabled ? "Rule is Active" : "Rule is Disabled"}
                         >
                           {rule.enabled ? (
-                            <ToggleRight className="size-6 text-primary" />
+                            <ToggleRight className="size-5 text-primary" />
                           ) : (
-                            <ToggleLeft className="size-6 text-muted-foreground/40" />
+                            <ToggleLeft className="size-5 text-muted-foreground/40" />
                           )}
                         </Button>
 
                         <Button
                           onClick={() => handleDeleteConditionRule(rule.id)}
                           variant="ghost"
-                          size="icon"
-                          className="size-7 text-muted-foreground hover:text-destructive cursor-pointer"
+                          size="icon-sm"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
                           title="Delete Rule"
                         >
                           <Trash2 className="size-3.5" />
@@ -669,12 +716,15 @@ export function RulesClient() {
               </div>
 
               {/* Evaluated Live Output Banner */}
-              <div className="mt-4 p-3.5 bg-muted/20 border border-border rounded-xl space-y-1">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                  <span>Evaluated Sample Row Output</span>
-                  <span className="text-xs text-primary font-mono font-normal">Live Preview</span>
+              <div className="p-3.5 bg-muted/20 border border-border rounded-md space-y-1.5">
+                <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between font-mono">
+                  <span className="flex items-center gap-1.5">
+                    <Activity className="size-3 text-primary" />
+                    Evaluated Sample Output Simulation
+                  </span>
+                  <span className="text-primary font-semibold">Live Preview</span>
                 </div>
-                <div className="font-mono text-xs text-zinc-100 bg-[#121212] p-2.5 rounded-lg border border-border font-medium">
+                <div className="font-mono text-xs text-foreground bg-background p-2.5 rounded-md border border-border font-medium select-all break-all">
                   {evaluatedSampleOutput}
                 </div>
               </div>
@@ -683,39 +733,52 @@ export function RulesClient() {
 
           {/* TAB 2 & 3: Generic Contract & Sample Inspector */}
           {(activeSchemaTab === "generic" || activeSchemaTab === "sample") && (
-            <div className="relative group bg-[#121212] border border-border rounded-xl overflow-hidden flex flex-col min-h-[350px]">
-              <Button
-                onClick={() =>
-                  handleCopy(
-                    JSON.stringify(
-                      activeSchemaTab === "generic"
-                        ? activeSchemaMeta.generic_structure
-                        : activeSchemaMeta.sample_event,
-                      null,
-                      2
+            <div className="relative group bg-muted/20 border border-border rounded-lg overflow-hidden flex flex-col min-h-[350px]">
+              <div className="flex items-center justify-between px-3.5 py-2 bg-muted/40 border-b border-border text-xs font-mono text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <FileCode className="size-3.5 text-primary" />
+                  {activeSchemaTab === "generic" ? "schema_contract.json" : "sample_event_payload.json"}
+                </span>
+                <Button
+                  onClick={() =>
+                    handleCopy(
+                      JSON.stringify(
+                        activeSchemaTab === "generic"
+                          ? activeSchemaMeta.generic_structure
+                          : activeSchemaMeta.sample_event,
+                        null,
+                        2
+                      )
                     )
-                  )
-                }
-                variant="outline"
-                size="icon"
-                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 size-7 bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm z-10"
-                title="Copy payload"
-              >
-                {copiedText ===
-                JSON.stringify(
-                  activeSchemaTab === "generic"
-                    ? activeSchemaMeta.generic_structure
-                    : activeSchemaMeta.sample_event,
-                  null,
-                  2
-                ) ? (
-                  <Check className="size-3.5 text-primary" />
-                ) : (
-                  <Copy className="size-3.5" />
-                )}
-              </Button>
-              <div className="p-4 overflow-auto max-h-[480px] text-left">
-                <pre className="text-xs text-zinc-100 font-mono leading-relaxed select-all whitespace-pre-wrap break-all pr-8">
+                  }
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] px-2 cursor-pointer gap-1"
+                  title="Copy JSON"
+                >
+                  {copiedText ===
+                  JSON.stringify(
+                    activeSchemaTab === "generic"
+                      ? activeSchemaMeta.generic_structure
+                      : activeSchemaMeta.sample_event,
+                    null,
+                    2
+                  ) ? (
+                    <>
+                      <Check className="size-3 text-primary" />
+                      <span>Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3" />
+                      <span>Copy JSON</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="p-4 overflow-auto max-h-[480px] text-left custom-scrollbar bg-background">
+                <pre className="text-xs text-foreground font-mono leading-relaxed select-all whitespace-pre-wrap break-all">
                   {JSON.stringify(
                     activeSchemaTab === "generic"
                       ? activeSchemaMeta.generic_structure

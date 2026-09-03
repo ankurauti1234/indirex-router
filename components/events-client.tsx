@@ -24,7 +24,7 @@ import {
   Braces,
 } from "lucide-react"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
-import { timezones } from "@/lib/timezones"
+import { timezones, mapLabelToIana, formatTimestamp } from "@/lib/timezones"
 import { PageContainer } from "./page-container"
 import { createClient } from "@/lib/supabase/client"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -142,14 +142,14 @@ export function EventsClient() {
   
   // Search & Filter Settings (Staging)
   const [stagedSearchTerm, setStagedSearchTerm] = React.useState("")
-  const [stagedSearchField, setStagedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device">("device_id")
+  const [stagedSearchField, setStagedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device" | "device_type">("device_id")
   const [stagedTypeFilter, setStagedTypeFilter] = React.useState<string>("ALL")
   const [stagedStartDateFilter, setStagedStartDateFilter] = React.useState<Date | undefined>(undefined)
   const [stagedEndDateFilter, setStagedEndDateFilter] = React.useState<Date | undefined>(undefined)
 
   // Active/Applied Filter Settings
   const [appliedSearchTerm, setAppliedSearchTerm] = React.useState("")
-  const [appliedSearchField, setAppliedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device">("device_id")
+  const [appliedSearchField, setAppliedSearchField] = React.useState<"device_id" | "id" | "hostname" | "device" | "device_type">("device_id")
   const [appliedTypeFilter, setAppliedTypeFilter] = React.useState<string>("ALL")
   const [appliedStartDateFilter, setAppliedStartDateFilter] = React.useState<Date | undefined>(undefined)
   const [appliedEndDateFilter, setAppliedEndDateFilter] = React.useState<Date | undefined>(undefined)
@@ -169,8 +169,9 @@ export function EventsClient() {
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = React.useState({
     device_id: true,
-    hostname: true,
-    device: true,
+    hostname: false,
+    device: false,
+    device_type: true,
     timestamp: true,
     type: true,
     details: true,
@@ -321,6 +322,8 @@ export function EventsClient() {
           return (evt.details?.device_context?.hostname || "").toLowerCase().includes(query)
         } else if (appliedSearchField === "device") {
           return (evt.details?.device_context?.device_id || "").toLowerCase().includes(query)
+        } else if (appliedSearchField === "device_type") {
+          return (evt.details?.device_context?.device_type || "").toLowerCase().includes(query)
         } else {
           return evt.id.toLowerCase().includes(query)
         }
@@ -335,56 +338,12 @@ export function EventsClient() {
 
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage)
 
-  // Resolve full human display label to valid standard IANA identifier
-  const mapLabelToIana = (tzLabel: string): string => {
-    if (tzLabel.startsWith("Auto (") && tzLabel.endsWith(")")) {
-      return tzLabel.slice(6, -1)
-    }
-    const found = timezones.find(t => t.label === tzLabel)
-    if (!found) return "UTC"
-
-    switch (found.value) {
-      case "UTC": return "UTC"
-      case "GMT": return "GMT"
-      case "IST-IN": return "Asia/Kolkata"
-      case "PST": return "America/Los_Angeles"
-      case "EST": return "America/New_York"
-      case "CST": return "America/Chicago"
-      case "MST": return "America/Denver"
-      case "CET": return "Europe/Berlin"
-      default: return found.value
-    }
-  }
-
   const getCleanTimezoneName = (tz: string) => {
     return mapLabelToIana(tz)
   }
 
   const formatDateString = (timestamp: number, timezone: string) => {
-    const cleanTz = mapLabelToIana(timezone)
-    const date = new Date(timestamp * 1000)
-    try {
-      const options: Intl.DateTimeFormatOptions = {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: cleanTz
-      }
-      return date.toLocaleString('en-US', options).replace(/,/g, '')
-    } catch (e) {
-      const optionsFallback: Intl.DateTimeFormatOptions = {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }
-      return date.toLocaleString('en-US', optionsFallback).replace(/,/g, '')
-    }
+    return formatTimestamp(timestamp, timezone)
   }
 
   const handleCopyText = (text: string) => {
@@ -619,7 +578,7 @@ export function EventsClient() {
     >
 
       {/* Main Database Grid Editor Container */}
-      <div className="flex flex-col border border-border bg-card rounded-lg shadow-2xs overflow-hidden">
+      <div className="flex flex-col border border-border bg-card rounded-lg shadow-2xs overflow-hidden w-full min-w-0">
         {/* Supabase Table Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/5 border-b border-border text-xs select-none">
           <div className="flex flex-wrap items-center gap-2">
@@ -637,6 +596,7 @@ export function EventsClient() {
                   <SelectItem value="device_id">device_id</SelectItem>
                   <SelectItem value="hostname">hostname</SelectItem>
                   <SelectItem value="device">device</SelectItem>
+                  <SelectItem value="device_type">device_type</SelectItem>
                   <SelectItem value="id">event (id)</SelectItem>
                 </SelectContent>
               </Select>
@@ -705,7 +665,7 @@ export function EventsClient() {
                 className="flex items-center gap-1.5 px-2.5 border border-border rounded-md h-8 bg-background hover:bg-muted/30 cursor-pointer text-xs text-foreground select-none font-medium transition-all"
               >
                 <Columns3 className="size-3.5 shrink-0" />
-                <span>Columns ({activeColumnsCount}/6)</span>
+                <span>Columns ({activeColumnsCount}/7)</span>
                 <ChevronDown className="size-3 text-muted-foreground/60" />
               </button>
 
@@ -739,6 +699,15 @@ export function EventsClient() {
                         className="rounded border-border text-primary focus:ring-ring size-3.5"
                       />
                       <span>device</span>
+                    </label>
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/50 rounded-md cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.device_type}
+                        onChange={() => toggleColumn("device_type")}
+                        className="rounded border-border text-primary focus:ring-ring size-3.5"
+                      />
+                      <span>device_type</span>
                     </label>
                     <label className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/50 rounded-md cursor-pointer select-none">
                       <input
@@ -835,7 +804,7 @@ export function EventsClient() {
         </div>
 
         {/* Main Content Table (Hides columns dynamically based on state) */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto w-full min-w-0 custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="border-b bg-muted/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none font-mono">
@@ -862,6 +831,15 @@ export function EventsClient() {
                     <div className="flex items-center gap-1.5">
                       <Server className="size-3 text-muted-foreground/60" />
                       <span>device</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                    </div>
+                  </th>
+                )}
+                {visibleColumns.device_type && (
+                  <th className="p-3 border-r border-border/40">
+                    <div className="flex items-center gap-1.5">
+                      <Laptop className="size-3 text-muted-foreground/60" />
+                      <span>device_type</span>
                       <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
                     </div>
                   </th>
@@ -907,6 +885,7 @@ export function EventsClient() {
                   const timestampStr = formatDateString(evt.timestamp, selectedTimezone)
                   const hostnameVal = evt.details?.device_context?.hostname || "-"
                   const deviceVal = evt.details?.device_context?.device_id || "-"
+                  const deviceTypeVal = evt.details?.device_context?.device_type || "-"
 
                   return (
                     <tr
@@ -973,6 +952,29 @@ export function EventsClient() {
                                 title="Copy Device Context ID"
                               >
                                 {copiedText === deviceVal ? (
+                                  <Check className="size-3 text-primary" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      {visibleColumns.device_type && (
+                        <td className="p-3 font-medium text-foreground border-r border-border/40">
+                          <div className="flex items-center justify-between gap-2 group/cell">
+                            <span className="font-mono text-muted-foreground">{deviceTypeVal}</span>
+                            {deviceTypeVal !== "-" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCopyText(deviceTypeVal)
+                                }}
+                                className="opacity-0 group-hover/cell:opacity-100 p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all cursor-pointer shrink-0"
+                                title="Copy Device Type"
+                              >
+                                {copiedText === deviceTypeVal ? (
                                   <Check className="size-3 text-primary" />
                                 ) : (
                                   <Copy className="size-3" />

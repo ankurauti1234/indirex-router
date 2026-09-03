@@ -22,7 +22,7 @@ import {
   Braces,
 } from "lucide-react"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
-import { timezones } from "@/lib/timezones"
+import { timezones, mapLabelToIana, formatTimestamp } from "@/lib/timezones"
 import { PageContainer } from "./page-container"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -389,57 +389,13 @@ export function EventMappingClient() {
     })
   }, [mappings, appliedSearchTerm, appliedSearchField, appliedStatusFilter])
 
-  // Resolve timezone human label to standard IANA timezone name
-  const mapLabelToIana = (tzLabel: string): string => {
-    if (tzLabel.startsWith("Auto (") && tzLabel.endsWith(")")) {
-      return tzLabel.slice(6, -1)
-    }
-    const found = timezones.find(t => t.label === tzLabel)
-    if (!found) return "UTC"
-
-    switch (found.value) {
-      case "UTC": return "UTC"
-      case "GMT": return "GMT"
-      case "IST-IN": return "Asia/Kolkata"
-      case "PST": return "America/Los_Angeles"
-      case "EST": return "America/New_York"
-      case "CST": return "America/Chicago"
-      case "MST": return "America/Denver"
-      case "CET": return "Europe/Berlin"
-      default: return found.value
-    }
-  }
-
   const getCleanTimezoneName = (tz: string) => {
     return mapLabelToIana(tz)
   }
 
   const formatDateString = (dateStr: string | null, timezone: string) => {
     if (!dateStr) return "Never"
-    const cleanTz = mapLabelToIana(timezone)
-    const date = new Date(dateStr)
-    try {
-      const options: Intl.DateTimeFormatOptions = {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: cleanTz
-      }
-      return date.toLocaleString('en-US', options).replace(/,/g, '')
-    } catch (e) {
-      const optionsFallback: Intl.DateTimeFormatOptions = {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }
-      return date.toLocaleString('en-US', optionsFallback).replace(/,/g, '')
-    }
+    return formatTimestamp(dateStr, timezone)
   }
 
   return (
@@ -456,7 +412,7 @@ export function EventMappingClient() {
     >
 
       {/* Main Database Grid Editor Container */}
-      <div className="flex flex-col border border-border bg-card rounded-lg shadow-2xs overflow-hidden">
+      <div className="flex flex-col border border-border bg-card rounded-lg shadow-2xs overflow-hidden w-full min-w-0">
         {/* Supabase Table Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/5 border-b border-border text-xs select-none">
           <div className="flex flex-wrap items-center gap-2">
@@ -604,7 +560,7 @@ export function EventMappingClient() {
         </div>
 
         {/* Main Content Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto w-full min-w-0 custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="border-b bg-muted/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none font-mono">
