@@ -2,6 +2,17 @@
 
 import * as React from "react"
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes"
+import { useTimezoneStore } from "@/lib/use-timezone-store"
+
+function TimezoneInitializer() {
+  const { setSelectedTimezone, getLocalTimezone } = useTimezoneStore()
+
+  React.useEffect(() => {
+    setSelectedTimezone(`Auto (${getLocalTimezone()})`)
+  }, [setSelectedTimezone, getLocalTimezone])
+
+  return null
+}
 
 function ThemeProvider({
   children,
@@ -16,6 +27,7 @@ function ThemeProvider({
       {...props}
     >
       <ThemeHotkey />
+      <TimezoneInitializer />
       {children}
     </NextThemesProvider>
   )
