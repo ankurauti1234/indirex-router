@@ -19,9 +19,10 @@ import { PageContainer } from "./page-container"
 import {
   PlatformMappingItem,
   getCustomPlatformMappings,
-  saveCustomPlatformMapping,
-  updatePlatformMapping,
-  deletePlatformMapping,
+  fetchPlatformMappings,
+  savePlatformMappingApi,
+  updatePlatformMappingApi,
+  deletePlatformMappingApi,
   SUPABASE_STORAGE_URL_PREFIX,
 } from "@/lib/platform-icons"
 import { Button } from "@/components/ui/button"
@@ -51,9 +52,11 @@ export function PlatformMappingClient() {
   const [isUploading, setIsUploading] = React.useState(false)
   const [uploadError, setUploadError] = React.useState<string | null>(null)
 
-  // Load platforms on mount
-  const loadPlatforms = React.useCallback(() => {
-    const list = getCustomPlatformMappings()
+  // Load platforms on mount & sync with Supabase DB / Storage
+  const loadPlatforms = React.useCallback(async () => {
+    // Show cached immediately, then fetch fresh from Supabase
+    setPlatforms(getCustomPlatformMappings())
+    const list = await fetchPlatformMappings()
     setPlatforms(list)
   }, [])
 
@@ -63,8 +66,9 @@ export function PlatformMappingClient() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    loadPlatforms()
-    setTimeout(() => setIsRefreshing(false), 400)
+    const list = await fetchPlatformMappings()
+    setPlatforms(list)
+    setIsRefreshing(false)
   }
 
   const handleCopyUrl = (url: string) => {
@@ -148,15 +152,17 @@ export function PlatformMappingClient() {
       finalIconUrl = `${SUPABASE_STORAGE_URL_PREFIX}${finalFileName}`
     }
 
+    let newList: PlatformMappingItem[] = []
+
     if (editingItem) {
-      updatePlatformMapping(editingItem.id, {
+      newList = await updatePlatformMappingApi(editingItem.id, {
         name: platName.trim(),
         key: platKey.trim().toLowerCase(),
         iconUrl: finalIconUrl,
         fileName: finalFileName,
       })
     } else {
-      saveCustomPlatformMapping({
+      newList = await savePlatformMappingApi({
         name: platName.trim(),
         key: platKey.trim().toLowerCase(),
         iconUrl: finalIconUrl,
@@ -164,8 +170,9 @@ export function PlatformMappingClient() {
       })
     }
 
+    setPlatforms(newList)
+
     // Reset and reload
-    loadPlatforms()
     setShowDialog(false)
     setEditingItem(null)
     setPlatName("")
@@ -175,8 +182,8 @@ export function PlatformMappingClient() {
     setUploadError(null)
   }
 
-  const handleDelete = (id: string) => {
-    const updated = deletePlatformMapping(id)
+  const handleDelete = async (id: string) => {
+    const updated = await deletePlatformMappingApi(id)
     setPlatforms(updated)
   }
 
