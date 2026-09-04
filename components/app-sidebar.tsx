@@ -25,6 +25,7 @@ import {
   Blocks,
   FileBarChart,
   Database,
+  Layers,
 } from "lucide-react"
 
 export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -55,6 +56,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
       label: "SYSTEM LOGIC",
       items: [
         { title: "Event Mapping", icon: GitFork, url: "/event-mapping" },
+        { title: "Platform Mapping", icon: Layers, url: "/platform-mapping" },
         { title: "Rules", icon: SlidersHorizontal, url: "/rules" },
       ],
     },

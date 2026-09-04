@@ -23,6 +23,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { findPlatformIconUrl } from "@/lib/platform-icons"
 import { PageContainer } from "./page-container"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -660,8 +661,16 @@ export function RulesClient() {
                     >
                       <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-mono font-semibold text-foreground bg-muted border px-2 py-0.5 rounded">
-                            if {rule.field} {rule.operator} "{rule.value}"
+                          <span className="text-xs font-mono font-semibold text-foreground bg-muted border px-2 py-0.5 rounded flex items-center gap-1.5">
+                            {findPlatformIconUrl(rule.value) && (
+                              <img
+                                src={findPlatformIconUrl(rule.value)!}
+                                alt={rule.value}
+                                className="size-4 rounded-xs object-cover shrink-0 select-none border border-border/60"
+                                title={rule.value}
+                              />
+                            )}
+                            <span>if {rule.field} {rule.operator} "{rule.value}"</span>
                           </span>
                           <ArrowRight className="size-3 text-muted-foreground shrink-0" />
                           <span className="text-xs font-bold text-foreground font-mono">

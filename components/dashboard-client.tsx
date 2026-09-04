@@ -27,6 +27,7 @@ import {
   Flame,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { findPlatformIconUrl } from "@/lib/platform-icons"
 import { PageContainer } from "./page-container"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
 import { formatTimestamp } from "@/lib/timezones"
@@ -404,8 +405,23 @@ export function DashboardClient() {
                             </span>
                           </div>
 
-                          <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
-                            Household: <span className="text-foreground">{hhid}</span> • Platform: <span className="text-foreground">{platform}</span> • Bitrate: <span className="text-foreground">{bitrate}</span>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 font-mono flex items-center gap-1.5 flex-wrap">
+                            <span>Household: <span className="text-foreground">{hhid}</span></span>
+                            <span>•</span>
+                            <span className="inline-flex items-center gap-1">
+                              <span>Platform:</span>
+                              {findPlatformIconUrl(platform) ? (
+                                <img
+                                  src={findPlatformIconUrl(platform)!}
+                                  alt={platform}
+                                  className="size-3.5 rounded-xs object-cover border border-border/80 shadow-2xs select-none"
+                                  title={platform}
+                                />
+                              ) : null}
+                              <span className="text-foreground font-semibold">{platform}</span>
+                            </span>
+                            <span>•</span>
+                            <span>Bitrate: <span className="text-foreground">{bitrate}</span></span>
                           </p>
                         </div>
                       </div>

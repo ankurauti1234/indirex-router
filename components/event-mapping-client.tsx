@@ -132,6 +132,43 @@ export function EventMappingClient() {
   // Count active columns
   const activeColumnsCount = Object.values(visibleColumns).filter(Boolean).length
 
+  // Column resizing state
+  const [colWidths, setColWidths] = React.useState<Record<string, number>>({
+    id: 110,
+    name: 200,
+    description: 350,
+    created_at: 190,
+    is_active: 130,
+  })
+
+  const handleColumnResize = (e: React.MouseEvent, colKey: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = colWidths[colKey] || 150
+    document.body.style.userSelect = "none"
+    document.body.style.cursor = "col-resize"
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX
+      const newWidth = Math.max(35, startWidth + delta)
+      setColWidths((prev) => ({
+        ...prev,
+        [colKey]: newWidth,
+      }))
+    }
+
+    const onMouseUp = () => {
+      document.body.style.userSelect = ""
+      document.body.style.cursor = ""
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+  }
+
   // Fetch Event Mappings from Supabase
   const fetchMappingsData = React.useCallback(async () => {
     try {
@@ -565,48 +602,88 @@ export function EventMappingClient() {
             <thead>
               <tr className="border-b bg-muted/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none font-mono">
                 {visibleColumns.id && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Type className="size-3 text-muted-foreground/60" />
-                      <span>type</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">smallint</span>
+                  <th
+                    style={{ width: `${colWidths.id || 110}px`, minWidth: `${colWidths.id || 110}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Type className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">type</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">smallint</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "id")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.name && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Laptop className="size-3 text-muted-foreground/60" />
-                      <span>name</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.name || 200}px`, minWidth: `${colWidths.name || 200}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Laptop className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">name</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "name")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.description && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Type className="size-3 text-muted-foreground/60" />
-                      <span>description</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.description || 350}px`, minWidth: `${colWidths.description || 350}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Type className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">description</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "description")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.created_at && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="size-3 text-muted-foreground/60" />
-                      <span>created_at</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">timestamptz</span>
+                  <th
+                    style={{ width: `${colWidths.created_at || 190}px`, minWidth: `${colWidths.created_at || 190}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Clock className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">created_at</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">timestamptz</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "created_at")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.is_active && (
-                  <th className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      <ToggleLeft className="size-3 text-muted-foreground/60" />
-                      <span>is_active</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">bool</span>
+                  <th
+                    style={{ width: `${colWidths.is_active || 130}px`, minWidth: `${colWidths.is_active || 130}px` }}
+                    className="p-3 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <ToggleLeft className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">is_active</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">bool</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "is_active")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
               </tr>
@@ -632,9 +709,13 @@ export function EventMappingClient() {
                         }`}
                     >
                       {visibleColumns.id && (
-                        <td className="p-3 font-semibold text-muted-foreground border-r border-border/40 font-mono">
-                          <div className="flex items-center justify-between gap-2 group/cell">
-                            <span>{m.id}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.id || 110}px` }}
+                          className="p-3 font-semibold text-muted-foreground border-r border-border/40 font-mono"
+                          title={m.id.toString()}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                            <span className="truncate">{m.id}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -653,9 +734,13 @@ export function EventMappingClient() {
                         </td>
                       )}
                       {visibleColumns.name && (
-                        <td className="p-3 font-semibold text-foreground border-r border-border/40">
-                          <div className="flex items-center justify-between gap-2 group/cell font-mono">
-                            <span>{m.name}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.name || 200}px` }}
+                          className="p-3 font-semibold text-foreground border-r border-border/40"
+                          title={m.name}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell font-mono min-w-0">
+                            <span className="truncate">{m.name}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -674,17 +759,28 @@ export function EventMappingClient() {
                         </td>
                       )}
                       {visibleColumns.description && (
-                        <td className="p-3 text-muted-foreground border-r border-border/40 max-w-sm truncate" title={m.description}>
+                        <td
+                          style={{ maxWidth: `${colWidths.description || 350}px` }}
+                          className="p-3 text-muted-foreground border-r border-border/40 truncate"
+                          title={m.description}
+                        >
                           {m.description}
                         </td>
                       )}
                       {visibleColumns.created_at && (
-                        <td className="p-3 text-muted-foreground font-mono border-r border-border/40">
+                        <td
+                          style={{ maxWidth: `${colWidths.created_at || 190}px` }}
+                          className="p-3 text-muted-foreground font-mono border-r border-border/40 truncate"
+                          title={createdStr}
+                        >
                           {createdStr}
                         </td>
                       )}
                       {visibleColumns.is_active && (
-                        <td className="p-3">
+                        <td
+                          style={{ maxWidth: `${colWidths.is_active || 130}px` }}
+                          className="p-3"
+                        >
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${m.is_active
                               ? "bg-primary/10 text-primary border-primary/20"
                               : "bg-muted text-muted-foreground border-border"

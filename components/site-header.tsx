@@ -65,7 +65,7 @@ export function SiteHeader({ user }: SiteHeaderProps) {
     : "AA"
 
   return (
-    <header className="sticky top-0 z-50 flex h-12 w-full shrink-0 items-center border-b border-border bg-card text-card-foreground px-3 select-none transition-colors">
+    <header className="sticky top-0 z-10 flex h-12 w-full shrink-0 items-center border-b border-border bg-card text-card-foreground px-3 select-none transition-colors">
       <div className="flex w-full items-center justify-between gap-4">
         
         {/* Left Section: Mobile Trigger, Logo & App Name */}

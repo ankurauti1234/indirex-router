@@ -27,6 +27,7 @@ import { useTimezoneStore } from "@/lib/use-timezone-store"
 import { timezones, mapLabelToIana, formatTimestamp } from "@/lib/timezones"
 import { PageContainer } from "./page-container"
 import { createClient } from "@/lib/supabase/client"
+import { findPlatformIconUrl } from "@/lib/platform-icons"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import type { DateRange } from "react-day-picker"
@@ -191,6 +192,45 @@ export function EventsClient() {
   // Pagination settings
   const [currentPage, setCurrentPage] = React.useState(1)
   const [itemsPerPage, setItemsPerPage] = React.useState(25)
+
+  // Column resizing state
+  const [colWidths, setColWidths] = React.useState<Record<string, number>>({
+    device_id: 160,
+    hostname: 160,
+    device: 140,
+    device_type: 140,
+    timestamp: 190,
+    type: 170,
+    details: 380,
+  })
+
+  const handleColumnResize = (e: React.MouseEvent, colKey: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = colWidths[colKey] || 150
+    document.body.style.userSelect = "none"
+    document.body.style.cursor = "col-resize"
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX
+      const newWidth = Math.max(35, startWidth + delta)
+      setColWidths((prev) => ({
+        ...prev,
+        [colKey]: newWidth,
+      }))
+    }
+
+    const onMouseUp = () => {
+      document.body.style.userSelect = ""
+      document.body.style.cursor = ""
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+  }
 
   // Chip management handlers
   const handleAddChip = (fieldParam?: FilterChip["field"], valueParam?: string) => {
@@ -646,20 +686,7 @@ export function EventsClient() {
   }, [eventTypes])
 
   const getPlatformIcon = (platform: string): string | null => {
-    const p = platform.toLowerCase().trim()
-    if (p.includes("youtube")) {
-      return "https://rrckvqnaajywiyfberob.supabase.co/storage/v1/object/public/router-device-assets/ott-icons/youtube.jpeg"
-    }
-    if (p.includes("prime") || p.includes("amazon")) {
-      return "https://rrckvqnaajywiyfberob.supabase.co/storage/v1/object/public/router-device-assets/ott-icons/amazon-prime.jpeg"
-    }
-    if (p.includes("jio") || p.includes("hotstar")) {
-      return "https://rrckvqnaajywiyfberob.supabase.co/storage/v1/object/public/router-device-assets/ott-icons/jio-hotstar.jpeg"
-    }
-    if (p.includes("netflix")) {
-      return "https://rrckvqnaajywiyfberob.supabase.co/storage/v1/object/public/router-device-assets/ott-icons/netflix.jpeg"
-    }
-    return null
+    return findPlatformIconUrl(platform)
   }
 
   const renderFormattedDetailsCell = (detailsText: string) => {
@@ -1118,66 +1145,122 @@ export function EventsClient() {
             <thead>
               <tr className="border-b bg-muted/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none font-mono">
                 {visibleColumns.device_id && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Type className="size-3 text-muted-foreground/60" />
-                      <span>device_id</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.device_id || 160}px`, minWidth: `${colWidths.device_id || 160}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Type className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">device_id</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "device_id")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.hostname && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Laptop className="size-3 text-muted-foreground/60" />
-                      <span>hostname</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.hostname || 160}px`, minWidth: `${colWidths.hostname || 160}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Laptop className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">hostname</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "hostname")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.device && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Server className="size-3 text-muted-foreground/60" />
-                      <span>device</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.device || 140}px`, minWidth: `${colWidths.device || 140}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Server className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">device</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "device")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.device_type && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Laptop className="size-3 text-muted-foreground/60" />
-                      <span>device_type</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">text</span>
+                  <th
+                    style={{ width: `${colWidths.device_type || 140}px`, minWidth: `${colWidths.device_type || 140}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Laptop className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">device_type</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "device_type")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.timestamp && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="size-3 text-muted-foreground/60" />
-                      <span>timestamp</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">timestamptz</span>
+                  <th
+                    style={{ width: `${colWidths.timestamp || 190}px`, minWidth: `${colWidths.timestamp || 190}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Clock className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">timestamp</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">timestamptz</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "timestamp")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.type && (
-                  <th className="p-3 border-r border-border/40">
-                    <div className="flex items-center gap-1.5">
-                      <Link2 className="size-3 text-muted-foreground/60" />
-                      <span>type</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">int2</span>
+                  <th
+                    style={{ width: `${colWidths.type || 170}px`, minWidth: `${colWidths.type || 170}px` }}
+                    className="p-3 border-r border-border/40 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Link2 className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">type</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">int2</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "type")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
                 {visibleColumns.details && (
-                  <th className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      <Braces className="size-3 text-muted-foreground/60" />
-                      <span>details</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal">jsonb</span>
+                  <th
+                    style={{ width: `${colWidths.details || 380}px`, minWidth: `${colWidths.details || 380}px` }}
+                    className="p-3 relative group/th"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Braces className="size-3 text-muted-foreground/60 shrink-0" />
+                      <span className="truncate">details</span>
+                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">jsonb</span>
                     </div>
+                    <div
+                      onMouseDown={(e) => handleColumnResize(e, "details")}
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                      title="Drag to resize column"
+                    />
                   </th>
                 )}
               </tr>
@@ -1195,6 +1278,7 @@ export function EventsClient() {
                   const hostnameVal = evt.details?.device_context?.hostname || "-"
                   const deviceVal = evt.details?.device_context?.device_id || "-"
                   const deviceTypeVal = evt.details?.device_context?.device_type || "-"
+                  const detailsJsonStr = JSON.stringify(evt.details || {})
 
                   return (
                     <tr
@@ -1204,9 +1288,13 @@ export function EventsClient() {
                       }`}
                     >
                       {visibleColumns.device_id && (
-                        <td className="p-3 font-medium text-foreground border-r border-border/40">
-                          <div className="flex items-center justify-between gap-2 group/cell">
-                            <span className="font-mono">{evt.device_id}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.device_id || 160}px` }}
+                          className="p-3 font-medium text-foreground border-r border-border/40"
+                          title={evt.device_id}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                            <span className="font-mono truncate">{evt.device_id}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -1225,9 +1313,13 @@ export function EventsClient() {
                         </td>
                       )}
                       {visibleColumns.hostname && (
-                        <td className="p-3 font-medium text-foreground border-r border-border/40">
-                          <div className="flex items-center justify-between gap-2 group/cell">
-                            <span className="font-mono text-muted-foreground">{hostnameVal}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.hostname || 160}px` }}
+                          className="p-3 font-medium text-foreground border-r border-border/40"
+                          title={hostnameVal}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                            <span className="font-mono text-muted-foreground truncate">{hostnameVal}</span>
                             {hostnameVal !== "-" && (
                               <button
                                 onClick={(e) => {
@@ -1248,9 +1340,13 @@ export function EventsClient() {
                         </td>
                       )}
                       {visibleColumns.device && (
-                        <td className="p-3 font-medium text-foreground border-r border-border/40">
-                          <div className="flex items-center justify-between gap-2 group/cell">
-                            <span className="font-mono text-muted-foreground">{deviceVal}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.device || 140}px` }}
+                          className="p-3 font-medium text-foreground border-r border-border/40"
+                          title={deviceVal}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                            <span className="font-mono text-muted-foreground truncate">{deviceVal}</span>
                             {deviceVal !== "-" && (
                               <button
                                 onClick={(e) => {
@@ -1271,9 +1367,13 @@ export function EventsClient() {
                         </td>
                       )}
                       {visibleColumns.device_type && (
-                        <td className="p-3 font-medium text-foreground border-r border-border/40">
-                          <div className="flex items-center justify-between gap-2 group/cell">
-                            <span className="font-mono text-muted-foreground">{deviceTypeVal}</span>
+                        <td
+                          style={{ maxWidth: `${colWidths.device_type || 140}px` }}
+                          className="p-3 font-medium text-foreground border-r border-border/40"
+                          title={deviceTypeVal}
+                        >
+                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                            <span className="font-mono text-muted-foreground truncate">{deviceTypeVal}</span>
                             {deviceTypeVal !== "-" && (
                               <button
                                 onClick={(e) => {
@@ -1294,27 +1394,38 @@ export function EventsClient() {
                         </td>
                       )}
                       {visibleColumns.timestamp && (
-                        <td className="p-3 text-muted-foreground font-mono border-r border-border/40">
+                        <td
+                          style={{ maxWidth: `${colWidths.timestamp || 190}px` }}
+                          className="p-3 text-muted-foreground font-mono border-r border-border/40 truncate"
+                          title={timestampStr}
+                        >
                           {timestampStr}
                         </td>
                       )}
                       {visibleColumns.type && (
-                        <td className="p-3 font-medium text-foreground border-r border-border/40">
-                          <span className="bg-muted px-2.5 py-1 rounded-md text-xs font-mono border border-border" title={eventTypes.find(t => t.id === evt.type)?.description}>
+                        <td
+                          style={{ maxWidth: `${colWidths.type || 170}px` }}
+                          className="p-3 font-medium text-foreground border-r border-border/40 truncate"
+                          title={`${getEventTypeName(evt.type)} - ${eventTypes.find(t => t.id === evt.type)?.description || ""}`}
+                        >
+                          <span className="bg-muted px-2.5 py-1 rounded-md text-xs font-mono border border-border inline-block truncate max-w-full">
                             {getEventTypeName(evt.type)}
                           </span>
                         </td>
                       )}
                       {visibleColumns.details && (
                         <td
+                          style={{ maxWidth: `${colWidths.details || 380}px` }}
                           onClick={() => {
                             setSelectedEvent(evt)
                             setActiveDetailTab("overview")
                           }}
-                          className="p-3 font-medium text-foreground max-w-sm truncate cursor-pointer hover:bg-primary/5 transition-colors"
-                          title="Click to view details"
+                          className="p-3 font-medium text-foreground truncate cursor-pointer hover:bg-primary/5 transition-colors"
+                          title={`Click to view details JSON:\n${detailsJsonStr}`}
                         >
-                          {renderFormattedDetailsCell(getDynamicDetails(evt))}
+                          <div className="truncate">
+                            {renderFormattedDetailsCell(getDynamicDetails(evt))}
+                          </div>
                         </td>
                       )}
                     </tr>
