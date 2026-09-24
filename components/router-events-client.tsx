@@ -250,6 +250,63 @@ export function RouterEventsClient() {
   // Fetch router event types & distinct devices & telemetry router events
   const fetchSupabaseData = React.useCallback(async () => {
     try {
+      const params = new URLSearchParams()
+      if (appliedTypeFilter !== "ALL") params.set("type", appliedTypeFilter)
+      if (appliedDeviceFilter !== "ALL") params.set("device_id", appliedDeviceFilter)
+      if (appliedSubDeviceFilter !== "ALL") params.set("sub_device_id", appliedSubDeviceFilter)
+      if (appliedStartDateFilter) params.set("startDate", appliedStartDateFilter.toISOString())
+      if (appliedEndDateFilter) params.set("endDate", appliedEndDateFilter.toISOString())
+
+      const res = await fetch(`/api/router-events?${params.toString()}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.distinctDevices && Array.isArray(json.distinctDevices)) {
+          setDistinctDevices(json.distinctDevices)
+        }
+        if (json.eventTypes && Array.isArray(json.eventTypes) && json.eventTypes.length > 0) {
+          const dbTypesMap = new Map<number, any>(json.eventTypes.map((t: any) => [t.type, t]))
+          const merged: RouterEventTypeMeta[] = DEFAULT_ROUTER_EVENT_TYPES.map(def => {
+            const dbItem = dbTypesMap.get(def.type)
+            return {
+              ...def,
+              name: dbItem?.name || def.name,
+              description: dbItem?.description || def.description,
+            }
+          })
+          setEventTypes(merged)
+        }
+        if (json.events && Array.isArray(json.events)) {
+          const formatted: RouterEventLog[] = json.events.map((d: any) => {
+            let detailsObj: any = {}
+            if (typeof d.details === "string") {
+              try {
+                detailsObj = JSON.parse(d.details)
+              } catch {
+                detailsObj = {}
+              }
+            } else if (d.details && typeof d.details === "object") {
+              detailsObj = d.details
+            }
+
+            return {
+              id: String(d.id),
+              device_id: String(d.device_id || ""),
+              sub_device_id: d.sub_device_id ? String(d.sub_device_id) : null,
+              type: typeof d.type === "number" ? d.type : parseInt(d.type || "0", 10),
+              timestamp: d.timestamp,
+              details: detailsObj,
+              created_at: d.created_at || new Date().toISOString(),
+            }
+          })
+          setEvents(formatted)
+          return
+        }
+      }
+    } catch (apiErr) {
+      console.warn("API route /api/router-events failed, falling back to direct client Supabase query:", apiErr)
+    }
+
+    try {
       // 1. Fetch router event types
       const typesRes = await supabase.from("router_event_types").select("*").order("type", { ascending: true })
       if (!typesRes.error && typesRes.data && typesRes.data.length > 0) {

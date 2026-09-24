@@ -133,6 +133,44 @@ export function RouterEventTypesClient() {
 
   const fetchTypesData = React.useCallback(async () => {
     try {
+      const res = await fetch("/api/router-event-types")
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data) && data.length > 0) {
+          const dbMap = new Map(data.map((d: any) => [d.type, d]))
+          const combined: RouterEventTypeMapping[] = DEFAULT_ROUTER_EVENT_TYPES.map(def => {
+            const dbItem = dbMap.get(def.type)
+            return {
+              ...def,
+              name: dbItem?.name || def.name,
+              description: dbItem?.description || def.description,
+            }
+          })
+
+          data.forEach((d: any) => {
+            if (!DEFAULT_ROUTER_EVENT_TYPES.some(def => def.type === d.type)) {
+              combined.push({
+                type: d.type,
+                name: d.name || `TYPE_${d.type}`,
+                description: d.description || "Custom router event type",
+                template: "[{details}]",
+                structure: {},
+                sample: {},
+                field_rules: [],
+              })
+            }
+          })
+
+          combined.sort((a, b) => a.type - b.type)
+          setTypes(combined)
+          return
+        }
+      }
+    } catch (apiErr) {
+      console.warn("API route /api/router-event-types failed, falling back to direct client Supabase query:", apiErr)
+    }
+
+    try {
       const { data, error } = await supabase.from("router_event_types").select("*").order("type", { ascending: true })
       
       if (!error && data) {
