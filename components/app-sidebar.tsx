@@ -26,6 +26,8 @@ import {
   FileBarChart,
   Database,
   Layers,
+  Radio,
+  Zap,
 } from "lucide-react"
 
 export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -47,6 +49,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
       items: [
         { title: "Dashboard", icon: Home, url: "/dashboard" },
         { title: "Events Explorer", icon: Database, url: "/events" },
+        { title: "Router Events", icon: Radio, url: "/router-events" },
         { title: "Sessions", icon: Activity, url: "/sessions" },
         { title: "Activity Timeline", icon: History, url: "/activity" },
         { title: "Reports", icon: FileBarChart, url: "/reports" },
@@ -56,8 +59,10 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
       label: "SYSTEM LOGIC",
       items: [
         { title: "Event Mapping", icon: GitFork, url: "/event-mapping" },
+        { title: "Router Event Types", icon: Zap, url: "/router-event-types" },
         { title: "Platform Mapping", icon: Layers, url: "/platform-mapping" },
         { title: "Rules", icon: SlidersHorizontal, url: "/rules" },
+        { title: "Router Rules", icon: SlidersHorizontal, url: "/router-rules" },
       ],
     },
     {
@@ -133,3 +138,4 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
     </Sidebar>
   )
 }
+
