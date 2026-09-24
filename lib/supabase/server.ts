@@ -31,3 +31,19 @@ export async function createClient() {
     }
   )
 }
+
+export function createAdminClient() {
+  const { createClient: createJSClient } = require("@supabase/supabase-js")
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    ""
+
+  return createJSClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
