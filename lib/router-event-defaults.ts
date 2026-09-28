@@ -371,19 +371,49 @@ export const DEFAULT_ROUTER_EVENT_TYPES: RouterEventTypeMeta[] = [
     type: 6,
     name: "MEMBER_REGISTRATION",
     description: "Member to device mapping registration",
-    template: "Member: {member_name} ({member_id}) • registered devices count: {devices.length}",
+    template: "Registered member devices: {member_details.length} • Members: {member_summary}",
     structure: {
-      member_id: "m_001",
-      member_name: "Deepak",
-      devices: [
-        { mac: "AA:BB:CC:DD:EE:FF", hostname: "Galaxy-S21", device_type: "phone" }
+      member_details: [
+        {
+          ip: "192.168.8.138",
+          mac: "B0:A1:87:32:91:FF",
+          device_type: "Mobile",
+          member_code: "M1"
+        }
       ]
     },
     sample: {
-      member_id: "m_001",
-      member_name: "Deepak",
-      devices: [
-        { mac: "AA:BB:CC:DD:EE:FF", hostname: "Galaxy-S21", device_type: "phone" }
+      member_details: [
+        {
+          ip: "192.168.8.138",
+          mac: "B0:A1:87:32:91:FF",
+          device_type: "Mobile",
+          member_code: "M1"
+        },
+        {
+          ip: "192.168.8.108",
+          mac: "00:E0:4C:4A:2E:20",
+          device_type: "Laptop Windows DJ11",
+          member_code: "M1"
+        },
+        {
+          ip: "192.168.8.109",
+          mac: "40:2F:86:EA:E3:A4",
+          device_type: "Smart TV",
+          member_code: "M3"
+        },
+        {
+          ip: "192.168.8.201",
+          mac: "F6:BF:F3:F7:1D:95",
+          device_type: "DJ_Windows",
+          member_code: "Deepak's Laptop"
+        },
+        {
+          ip: "192.168.8.114",
+          mac: "F4:CE:23:9E:4D:3C",
+          device_type: "Laptop",
+          member_code: "Deepak's Kali"
+        }
       ]
     },
     field_rules: []
@@ -561,17 +591,90 @@ export const DEFAULT_ROUTER_EVENT_TYPES: RouterEventTypeMeta[] = [
   }
 ]
 
-export function getNestedProp(obj: any, path: string): any {
+export function getNestedProp(obj: any, rawPath: string): any {
   if (!obj || typeof obj !== "object") return undefined
-  const parts = path.split(".")
-  let current = obj
-  for (const part of parts) {
-    if (current && typeof current === "object" && part in current) {
-      current = current[part]
-    } else {
-      return undefined
+
+  const path = rawPath.replace(/\[\]/g, "").trim()
+  if (!path) return undefined
+
+  // Handle virtual property: member_summary / member_details.summary
+  if (path === "member_summary" || path === "member_details.summary" || path === "members_summary") {
+    const list = Array.isArray(obj) ? obj : (Array.isArray(obj.member_details) ? obj.member_details : (Array.isArray(obj.members) ? obj.members : []))
+    if (list.length > 0) {
+      const summaryList = list
+        .map((m: any) => {
+          if (!m) return null
+          const code = m.member_code || m.code || m.member_id || ""
+          const type = m.device_type || m.type || m.hostname || ""
+          if (code && type) return `${code}: ${type}`
+          return code || type || null
+        })
+        .filter(Boolean)
+      if (summaryList.length > 0) return summaryList
     }
   }
+
+  // Handle virtual property: member_codes & fallbacks for member_name / member_id
+  if (path === "member_codes" || path === "member_code" || path === "member_name" || path === "member_id") {
+    const list = Array.isArray(obj) ? obj : (Array.isArray(obj.member_details) ? obj.member_details : (Array.isArray(obj.members) ? obj.members : []))
+    if (list.length > 0) {
+      const codes = list.map((m: any) => m?.member_code || m?.member_id || m?.code).filter(Boolean)
+      if (codes.length > 0) return codes
+    }
+  }
+
+  // Handle virtual property: devices.length / member_details.length
+  if (path === "devices.length" || path === "member_details.length" || path === "devices_count" || path === "registered_devices_count" || path === "length") {
+    if (Array.isArray(obj)) return obj.length
+    if (Array.isArray(obj.member_details)) return obj.member_details.length
+    if (Array.isArray(obj.devices)) return obj.devices.length
+    if (Array.isArray(obj.members)) return obj.members.length
+  }
+
+  const parts = path.split(".")
+  let current: any = obj
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (current === undefined || current === null) return undefined
+
+    if (Array.isArray(current)) {
+      if (part === "length") {
+        current = current.length
+      } else if (part === "summary") {
+        const summaryList = current
+          .map((m: any) => {
+            if (!m) return null
+            const code = m.member_code || m.code || m.member_id || ""
+            const type = m.device_type || m.type || m.hostname || ""
+            if (code && type) return `${code}: ${type}`
+            return code || type || null
+          })
+          .filter(Boolean)
+        return summaryList.length > 0 ? summaryList : undefined
+      } else if (!isNaN(Number(part))) {
+        current = current[Number(part)]
+      } else {
+        const subPath = parts.slice(i).join(".")
+        const mapped = current
+          .map((item: any) => getNestedProp(item, subPath))
+          .flat()
+          .filter((v: any) => v !== undefined && v !== null && v !== "")
+        return mapped.length > 0 ? mapped : undefined
+      }
+    } else if (typeof current === "object" && part in current) {
+      current = current[part]
+    } else {
+      if (part === "devices" && Array.isArray(current.member_details)) {
+        current = current.member_details
+      } else if (part === "member_details" && Array.isArray(current)) {
+        current = current
+      } else {
+        return undefined
+      }
+    }
+  }
+
   return current
 }
 
@@ -598,14 +701,27 @@ export function formatRouterDetails(
         else if (rule.operator === "is_empty") match = strVal === "" || strVal === "null"
         else if (rule.operator === "gt") match = Number(val) > Number(rule.value)
         else if (rule.operator === "lt") match = Number(val) < Number(rule.value)
-
-        if (match && rule.display_text) {
-          // match rule display text
-        }
       }
     }
   }
 
+  // 1. PRIORITIZE CUSTOM TEMPLATE
+  if (customTemplate && customTemplate.trim() !== "") {
+    let output = customTemplate
+    const braceRegex = /\{([^}]+)\}/g
+    output = output.replace(braceRegex, (_, path) => {
+      const value = getNestedProp(details, path)
+      if (value === undefined || value === null) return ""
+      if (Array.isArray(value)) return value.join(", ")
+      return String(value)
+    })
+    output = output.replace(/\(\s*\)/g, "").replace(/\s+•/g, " •")
+    if (output.trim() !== "") {
+      return output.trim()
+    }
+  }
+
+  // 2. FALLBACK FORMATTING PER TYPE ID
   if (typeId === 4) {
     const dev = details.device_details || {}
     const dom = details.domain_activity || {}
@@ -654,9 +770,23 @@ export function formatRouterDetails(
   }
 
   if (typeId === 6) {
+    const list = Array.isArray(details) ? details : (Array.isArray(details.member_details) ? details.member_details : (Array.isArray(details.devices) ? details.devices : []))
+    if (list.length > 0) {
+      const summaryList = list
+        .map((m: any) => {
+          if (!m) return null
+          const code = m.member_code || m.code || m.member_id || ""
+          const type = m.device_type || m.type || m.hostname || ""
+          if (code && type) return `${code}: ${type}`
+          return code || type || null
+        })
+        .filter(Boolean)
+      const summaryStr = summaryList.length > 0 ? summaryList.join(", ") : "Member"
+      return `Registered member devices: ${list.length} • Members: ${summaryStr}`
+    }
     const name = details.member_name || details.member_id || "Member"
     const devCount = Array.isArray(details.devices) ? details.devices.length : 0
-    return `Member Registered: ${name} • ${devCount} device(s)`
+    return `Registered member devices: ${devCount}`
   }
 
   if (typeId === 7) {
@@ -687,16 +817,6 @@ export function formatRouterDetails(
     const content = details.content || {}
     const ctx = details.device_context || {}
     return `[YouTube Ad] ${content.ad_domain || "Ad domain"} • IP: ${ctx.source_ip || "-"}`
-  }
-
-  if (customTemplate) {
-    let output = customTemplate
-    const braceRegex = /\{([^}]+)\}/g
-    output = output.replace(braceRegex, (_, path) => {
-      const value = getNestedProp(details, path)
-      return value !== undefined && value !== null ? String(value) : ""
-    })
-    return output.trim()
   }
 
   const parts: string[] = []
