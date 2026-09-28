@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { PageContainer } from "@/components/page-container"
+import { ReportsClient } from "@/components/reports-client"
 
 export default async function Page() {
   const supabase = await createClient()
@@ -10,11 +10,5 @@ export default async function Page() {
     redirect("/login")
   }
 
-  return (
-    <PageContainer
-      title="Reports"
-      description="Generate and export audience measurement metrics, household coverage graphs, and panel reach reports."
-      placeholderText="Reports generator and export statistics panel"
-    />
-  )
+  return <ReportsClient />
 }
