@@ -120,20 +120,37 @@ export function DashboardClient() {
   const supabase = createClient()
   const { selectedTimezone } = useTimezoneStore()
   const [events, setEvents] = React.useState<PlaybackEvent[]>(FALLBACK_EVENTS)
-  const [activeTab, setActiveTab] = React.useState<"ALL" | "PLAY" | "HEARTBEAT" | "DECLARATION">("ALL")
+  const [dbEventTypes, setDbEventTypes] = React.useState<Map<number, string>>(new Map())
+  const [activeTab, setActiveTab] = React.useState<"ALL" | "PLAY" | "HEARTBEAT" | "TV" | "DECLARATION">("ALL")
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
     async function loadData() {
       try {
-        const { data, error } = await supabase
-          .from("playback_events")
-          .select("*")
-          .order("timestamp", { ascending: false })
-          .limit(40)
+        const [eventsRes, typesRes] = await Promise.all([
+          supabase
+            .from("playback_events")
+            .select("*")
+            .order("timestamp", { ascending: false })
+            .limit(40),
+          supabase
+            .from("event_types")
+            .select("type, name")
+            .order("type", { ascending: true })
+        ])
 
-        if (!error && data && data.length > 0) {
-          const parsed = data.map((d: any) => {
+        if (!typesRes.error && typesRes.data) {
+          const typeMap = new Map<number, string>()
+          typesRes.data.forEach((t: any) => {
+            if (t.type !== undefined && t.name) {
+              typeMap.set(Number(t.type), String(t.name))
+            }
+          })
+          setDbEventTypes(typeMap)
+        }
+
+        if (!eventsRes.error && eventsRes.data && eventsRes.data.length > 0) {
+          const parsed = eventsRes.data.map((d: any) => {
             let detailsObj = {}
             if (typeof d.details === "string") {
               try { detailsObj = JSON.parse(d.details) } catch { detailsObj = {} }
@@ -151,7 +168,7 @@ export function DashboardClient() {
           setEvents(parsed)
         }
       } catch (e) {
-        console.error(e)
+        console.error("Dashboard loadData error:", e)
       } finally {
         setLoading(false)
       }
@@ -159,16 +176,20 @@ export function DashboardClient() {
     loadData()
   }, [supabase])
 
+  const STATIC_TYPE_NAMES: Record<number, string> = {
+    1: "PLAY_START",
+    2: "PLAY_HEARTBEAT",
+    3: "PLAY_PAUSE",
+    4: "PLAY_RESUME",
+    5: "PLAY_END",
+    6: "CONTENT_CHANGE",
+    7: "TV_ON",
+    8: "TV_OFF",
+    18: "NETWORK_DECLARATION",
+  }
+
   const getTypeName = (type: number): string => {
-    switch (type) {
-      case 1: return "PLAY_START"
-      case 2: return "PLAY_HEARTBEAT"
-      case 3: return "PLAY_PAUSE"
-      case 4: return "PLAY_RESUME"
-      case 5: return "PLAY_END"
-      case 18: return "NETWORK_DECLARATION"
-      default: return `EVENT_TYPE_${type}`
-    }
+    return dbEventTypes.get(type) || STATIC_TYPE_NAMES[type] || `EVENT_TYPE_${type}`
   }
 
   const getTypeBadgeClass = (type: number): string => {
@@ -178,18 +199,28 @@ export function DashboardClient() {
       case 3: return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
       case 4: return "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
       case 5: return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+      case 6: return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
+      case 7: return "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"
+      case 8: return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
       case 18: return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
       default: return "bg-muted text-muted-foreground border-border"
     }
   }
 
-  // Filter events based on active tab & limit to latest 5
+  // Count tab events dynamically
+  const playCount = events.filter(e => e.type === 1 || e.type === 3 || e.type === 4 || e.type === 5 || e.type === 6).length
+  const heartbeatCount = events.filter(e => e.type === 2).length
+  const tvCount = events.filter(e => e.type === 7 || e.type === 8).length
+  const declCount = events.filter(e => e.type === 18).length
+
+  // Filter events based on active tab & limit to latest 8
   const filteredEvents = React.useMemo(() => {
     let list = events
-    if (activeTab === "PLAY") list = events.filter(e => e.type === 1 || e.type === 4)
+    if (activeTab === "PLAY") list = events.filter(e => e.type === 1 || e.type === 3 || e.type === 4 || e.type === 5 || e.type === 6)
     else if (activeTab === "HEARTBEAT") list = events.filter(e => e.type === 2)
+    else if (activeTab === "TV") list = events.filter(e => e.type === 7 || e.type === 8)
     else if (activeTab === "DECLARATION") list = events.filter(e => e.type === 18)
-    return list.slice(0, 5)
+    return list.slice(0, 8)
   }, [events, activeTab])
 
   // Aggregate stats
@@ -337,7 +368,7 @@ export function DashboardClient() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
                   }`}
                 >
-                  Playback (1)
+                  Playback ({playCount})
                 </button>
                 <button
                   type="button"
@@ -348,7 +379,18 @@ export function DashboardClient() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
                   }`}
                 >
-                  Heartbeats (2)
+                  Heartbeats ({heartbeatCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("TV")}
+                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
+                    activeTab === "TV"
+                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                  }`}
+                >
+                  TV Power ({tvCount})
                 </button>
                 <button
                   type="button"
@@ -359,7 +401,7 @@ export function DashboardClient() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
                   }`}
                 >
-                  Declarations (18)
+                  Declarations ({declCount})
                 </button>
               </div>
             </div>
@@ -368,11 +410,20 @@ export function DashboardClient() {
             <div className="space-y-3">
               {filteredEvents.map((evt) => {
                 const devType = evt.details?.device_context?.device_type || "Smart TV"
-                const contentTitle = evt.details?.content?.title || evt.details?.payload?.sensor_status || "Jurassic World Rebirth"
-                const platform = evt.details?.content?.platform || "OTT"
+                let contentTitle = evt.details?.content?.title || evt.details?.payload?.sensor_status
+                if (!contentTitle) {
+                  if (evt.type === 7) contentTitle = "TV Turned On"
+                  else if (evt.type === 8) contentTitle = "TV Turned Off"
+                  else if (evt.type === 6) contentTitle = evt.details?.new_content?.title || "Content Changed"
+                  else if (evt.type === 3) contentTitle = "Playback Paused"
+                  else if (evt.type === 5) contentTitle = "Playback Finished"
+                  else contentTitle = "Live Telemetry"
+                }
+
+                const platform = evt.details?.content?.platform || (evt.type === 7 || evt.type === 8 ? evt.details?.device_context?.os || "Smart TV" : "OTT")
                 const hhid = evt.details?.household_context?.hhid || "HH0002"
-                const bitrate = evt.details?.playback?.bitrate || "1080p"
-                const playhead = evt.details?.playback?.playhead_position || 0
+                const bitrate = evt.details?.playback?.bitrate || (evt.type === 7 || evt.type === 8 ? null : "1080p")
+                const playhead = evt.details?.playback?.playhead_position || evt.details?.playhead_position || 0
 
                 return (
                   <div
@@ -420,8 +471,12 @@ export function DashboardClient() {
                               ) : null}
                               <span className="text-foreground font-semibold">{platform}</span>
                             </span>
-                            <span>•</span>
-                            <span>Bitrate: <span className="text-foreground">{bitrate}</span></span>
+                            {bitrate && (
+                              <>
+                                <span>•</span>
+                                <span>Bitrate: <span className="text-foreground">{bitrate}</span></span>
+                              </>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -437,6 +492,8 @@ export function DashboardClient() {
                       <div className="flex items-center gap-3">
                         {playhead > 0 && <span>Playhead: {playhead}s</span>}
                         {evt.details?.reason && <span>Reason: {evt.details.reason}</span>}
+                        {evt.type === 7 && <span className="text-teal-400 font-semibold">Status: Screen ON</span>}
+                        {evt.type === 8 && <span className="text-slate-400 font-semibold">Status: Screen OFF</span>}
                         {evt.details?.payload?.human_count && (
                           <span className="text-emerald-400 font-semibold">
                             Human Count: {evt.details.payload.human_count} | Temp: {evt.details.payload.ambient_temp}

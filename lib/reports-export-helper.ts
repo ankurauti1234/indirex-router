@@ -69,6 +69,8 @@ export const PLAYBACK_EVENT_TYPE_NAMES: Record<number, string> = {
   4: "PLAY_RESUME",
   5: "PLAY_END",
   6: "CONTENT_CHANGE",
+  7: "TV_ON",
+  8: "TV_OFF",
 }
 
 /**
@@ -89,6 +91,10 @@ export function getPlaybackSummary(details: any, typeId: number): string {
       return `playhead: ${details.playhead_position ?? details.playback?.playhead_position ?? 0}s • reason: ${details.reason || ""} • completion: ${details.completion_percentage || 0}%`
     case 6:
       return `reason: ${details.reason || ""} • new: ${details.new_content?.title || ""}`
+    case 7:
+      return `TV turned on • ${details.content?.title || details.device_context?.hostname || "Screen ON"}`
+    case 8:
+      return `TV turned off • ${details.device_context?.hostname || "Screen OFF"}`
     default: {
       const parts: string[] = []
       if (details.content?.title) parts.push(`title: ${details.content.title}`)

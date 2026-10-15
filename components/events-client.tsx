@@ -660,6 +660,10 @@ export function EventsClient() {
         return `playhead: ${details.playhead_position || 0}s • reason: ${details.reason || ""} • completion: ${details.completion_percentage || 0}%`
       case 6:
         return `reason: ${details.reason || ""} • new: ${details.new_content?.title || ""}`
+      case 7:
+        return `TV turned on • ${details.content?.title || details.device_context?.hostname || "Screen ON"}`
+      case 8:
+        return `TV turned off • ${details.device_context?.hostname || "Screen OFF"}`
       default:
         // Generic JSON extractor fallback for other custom event types
         if (!details || typeof details !== 'object') return "-"
