@@ -163,6 +163,20 @@ const formatTimeToHHMM = (date?: Date): string => {
   return `${h}:${m}`
 }
 
+const parseTimestampToUnix = (tsVal: any): number => {
+  if (typeof tsVal === "number") {
+    return tsVal < 1e11 ? tsVal : Math.floor(tsVal / 1000)
+  }
+  if (!tsVal) return Math.floor(Date.now() / 1000)
+
+  let str = String(tsVal).trim()
+  if (str.includes(" ") && !str.includes("T")) {
+    str = str.replace(" ", "T")
+  }
+  const parsedMs = new Date(str).getTime()
+  return isNaN(parsedMs) ? Math.floor(Date.now() / 1000) : Math.floor(parsedMs / 1000)
+}
+
 export function EventsClient() {
   const { selectedTimezone } = useTimezoneStore()
   const [events, setEvents] = React.useState<EventLog[]>([])
@@ -188,6 +202,9 @@ export function EventsClient() {
 
   // Auto Refresh Interval selector state (default: 60 sec i.e. 60000 ms)
   const [refreshInterval, setRefreshInterval] = React.useState<number>(60000)
+  // Fetch limit state (default: 2000 records for fast loading)
+  const [fetchLimit, setFetchLimit] = React.useState<number>(2000)
+  const [isLoading, setIsLoading] = React.useState<boolean>(true)
 
   // Pagination settings
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -363,10 +380,77 @@ export function EventsClient() {
 
   const supabase = createClient()
 
-  // Fetch Event Types and Events from Supabase
+  // Fetch Event Types and Events from fast API route (with direct Supabase fallback)
   const fetchSupabaseData = React.useCallback(async () => {
+    setIsLoading(true)
     try {
-      // 1. Fetch Event Types and Rules
+      // 1. Fast server API route with parallel querying and limit
+      const params = new URLSearchParams()
+      params.set("limit", fetchLimit.toString())
+      if (appliedTypeFilter !== "ALL") params.set("type", appliedTypeFilter)
+      if (appliedStartDateFilter) params.set("startDate", appliedStartDateFilter.toISOString())
+      if (appliedEndDateFilter) params.set("endDate", appliedEndDateFilter.toISOString())
+
+      const res = await fetch(`/api/events?${params.toString()}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.eventTypes && Array.isArray(json.eventTypes)) {
+          const rulesData = json.rules || []
+          const formattedTypes: EventType[] = json.eventTypes.map((d: any) => {
+            const rule = rulesData.find((r: any) => r.type_id === d.type)
+            const descText = d.description || "No description set"
+            const templateText = rule?.template || undefined
+            const fieldRules = Array.isArray(rule?.field_rules)
+              ? rule.field_rules
+              : (Array.isArray(rule?.structure?._field_rules) ? rule.structure._field_rules : [])
+
+            return {
+              id: d.type,
+              name: d.name || `TYPE_${d.type}`,
+              description: descText,
+              is_active: d.is_active !== undefined ? d.is_active : true,
+              structure: rule?.structure || null,
+              sample: rule?.sample || null,
+              template: templateText,
+              field_rules: fieldRules,
+            }
+          })
+          setEventTypes(formattedTypes)
+        }
+
+        if (json.events && Array.isArray(json.events)) {
+          const formatted: EventLog[] = json.events.map((d: any) => {
+            let detailsObj: any = {}
+            if (typeof d.details === "string") {
+              try {
+                detailsObj = JSON.parse(d.details)
+              } catch {
+                detailsObj = {}
+              }
+            } else if (d.details && typeof d.details === "object") {
+              detailsObj = d.details
+            }
+
+            return {
+              id: String(d.id),
+              device_id: String(d.device_id || ""),
+              timestamp: parseTimestampToUnix(d.timestamp),
+              type: typeof d.type === "number" ? d.type : parseInt(d.type || "0", 10),
+              details: detailsObj,
+            }
+          })
+
+          setEvents(formatted)
+          setIsLoading(false)
+          return
+        }
+      }
+    } catch (apiErr) {
+      console.warn("API route /api/events failed, falling back to direct client Supabase query:", apiErr)
+    }
+
+    try {
+      // 2. Direct Supabase fallback (Fast single query with limit instead of 99 sequential chunk requests)
       const [typesRes, rulesRes] = await Promise.all([
         supabase.from("event_types").select("*"),
         supabase.from("event_details_rules").select("*")
@@ -398,62 +482,27 @@ export function EventsClient() {
         setEventTypes(formatted)
       }
 
-      // 2. Fetch ALL Telemetry Events from "playback_events" table in 1000-row chunks to bypass PostgREST limits
-      let eventsData: any[] = []
-      let pageIndex = 0
-      const pageSize = 1000
-      let hasMore = true
-      let fetchError = false
+      let query = supabase.from("playback_events").select("*")
 
-      while (hasMore) {
-        let query = supabase.from("playback_events").select("*")
-
-        if (appliedTypeFilter !== "ALL") {
-          query = query.eq("type", parseInt(appliedTypeFilter, 10))
-        }
-        if (appliedStartDateFilter) {
-          query = query.gte("timestamp", appliedStartDateFilter.toISOString())
-        }
-        if (appliedEndDateFilter) {
-          query = query.lte("timestamp", appliedEndDateFilter.toISOString())
-        }
-
-        const { data, error } = await query
-          .order("timestamp", { ascending: false })
-          .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1)
-
-        if (error) {
-          console.error("Error fetching events chunk:", error)
-          fetchError = true
-          hasMore = false
-        } else if (data && data.length > 0) {
-          eventsData.push(...data)
-          if (data.length < pageSize) {
-            hasMore = false
-          } else {
-            pageIndex++
-          }
-        } else {
-          hasMore = false
-        }
+      if (appliedTypeFilter !== "ALL") {
+        query = query.eq("type", parseInt(appliedTypeFilter, 10))
+      }
+      if (appliedStartDateFilter) {
+        query = query.gte("timestamp", appliedStartDateFilter.toISOString())
+      }
+      if (appliedEndDateFilter) {
+        query = query.lte("timestamp", appliedEndDateFilter.toISOString())
       }
 
-      if (!fetchError && eventsData.length > 0) {
-        const parseTimestampToUnix = (tsVal: any): number => {
-          if (typeof tsVal === "number") {
-            return tsVal < 1e11 ? tsVal : Math.floor(tsVal / 1000)
-          }
-          if (!tsVal) return Math.floor(Date.now() / 1000)
-          
-          let str = String(tsVal).trim()
-          if (str.includes(" ") && !str.includes("T")) {
-            str = str.replace(" ", "T")
-          }
-          const parsedMs = new Date(str).getTime()
-          return isNaN(parsedMs) ? Math.floor(Date.now() / 1000) : Math.floor(parsedMs / 1000)
-        }
+      const { data, error } = await query
+        .order("timestamp", { ascending: false })
+        .limit(fetchLimit)
 
-        const formatted: EventLog[] = eventsData.map((d: any) => {
+      if (error) {
+        console.error("Error fetching events:", error)
+        setEvents([])
+      } else if (data && data.length > 0) {
+        const formatted: EventLog[] = data.map((d: any) => {
           let detailsObj: any = {}
           if (typeof d.details === "string") {
             try {
@@ -474,8 +523,6 @@ export function EventsClient() {
           }
         })
 
-        // Sort descending by timestamp
-        formatted.sort((a, b) => b.timestamp - a.timestamp)
         setEvents(formatted)
       } else {
         setEvents([])
@@ -483,8 +530,10 @@ export function EventsClient() {
     } catch (e) {
       console.error(e)
       setEvents([])
+    } finally {
+      setIsLoading(false)
     }
-  }, [supabase, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter])
+  }, [supabase, appliedTypeFilter, appliedStartDateFilter, appliedEndDateFilter, fetchLimit])
 
   // Trigger manual refresh
   const handleRefresh = async () => {
@@ -1113,6 +1162,24 @@ export function EventsClient() {
           <div className="flex items-center gap-2">
             <ButtonGroup>
               <Select
+                value={fetchLimit.toString()}
+                onValueChange={(val) => setFetchLimit(parseInt(val || "2000", 10))}
+              >
+                <SelectTrigger className="h-8 text-xs sm:text-sm border border-border bg-background hover:bg-muted/30 text-foreground font-medium cursor-pointer shadow-none focus:ring-0 focus:ring-offset-0">
+                  <span className="text-xs text-muted-foreground/70 select-none font-medium mr-1">Limit:</span>
+                  <SelectValue placeholder="Limit">
+                    {fetchLimit.toLocaleString()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="500">500</SelectItem>
+                  <SelectItem value="1000">1,000</SelectItem>
+                  <SelectItem value="2000">2,000</SelectItem>
+                  <SelectItem value="5000">5,000</SelectItem>
+                  <SelectItem value="10000">10,000</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
                 value={refreshInterval.toString()}
                 onValueChange={(val) => setRefreshInterval(parseInt(val || "0"))}
               >
@@ -1137,7 +1204,7 @@ export function EventsClient() {
                 className="h-8 w-8 cursor-pointer shrink-0"
                 title="Refresh logs"
               >
-                <RefreshCw className={`size-3.5 text-muted-foreground ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw className={`size-3.5 text-muted-foreground ${isRefreshing || isLoading ? "animate-spin" : ""}`} />
               </Button>
             </ButtonGroup>
           </div>
@@ -1270,7 +1337,16 @@ export function EventsClient() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-xs sm:text-sm">
-              {filteredEvents.length === 0 ? (
+              {isLoading && events.length === 0 ? (
+                <tr>
+                  <td colSpan={activeColumnsCount} className="p-12 text-center text-muted-foreground font-mono">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <RefreshCw className="size-5 animate-spin text-muted-foreground/70" />
+                      <span className="text-xs">Loading events...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredEvents.length === 0 ? (
                 <tr>
                   <td colSpan={activeColumnsCount} className="p-8 text-center text-muted-foreground font-mono">
                     No records found matching filters
