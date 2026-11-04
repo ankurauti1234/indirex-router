@@ -1,14 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { RouterRulesClient } from "@/components/router-rules-client"
 
-export default async function Page() {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) {
-    redirect("/login")
-  }
-
-  return <RouterRulesClient />
+export default function Page() {
+  redirect("/rules")
 }

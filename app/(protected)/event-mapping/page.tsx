@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { EventMappingClient } from "@/components/event-mapping-client"
+import { UniversalEventMappingClient } from "@/components/shared/universal-event-mapping-client"
 
 export default async function Page() {
   const supabase = await createClient()
@@ -10,5 +10,5 @@ export default async function Page() {
     redirect("/login")
   }
 
-  return <EventMappingClient />
+  return <UniversalEventMappingClient />
 }

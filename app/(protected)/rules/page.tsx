@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { RulesClient } from "@/components/rules-client"
+import { UniversalRulesClient } from "@/components/shared/universal-rules-client"
 
 export default async function Page() {
   const supabase = await createClient()
@@ -10,5 +10,5 @@ export default async function Page() {
     redirect("/login")
   }
 
-  return <RulesClient />
+  return <UniversalRulesClient />
 }

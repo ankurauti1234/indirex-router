@@ -7,581 +7,632 @@ import {
   Database,
   Router as RouterIcon,
   Tv,
-  Smartphone,
-  Play,
-  Pause,
-  CheckCircle2,
-  TrendingUp,
-  Clock,
-  ArrowUpRight,
-  Filter,
-  Layers,
-  Wifi,
-  Zap,
   Radio,
+  Watch,
   FileBarChart,
   GitFork,
   SlidersHorizontal,
-  Terminal,
   ChevronRight,
   Flame,
+  ArrowUpRight,
+  RefreshCw,
+  Clock,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { findPlatformIconUrl } from "@/lib/platform-icons"
+import { findPlatformIconUrl, fetchPlatformMappings } from "@/lib/platform-icons"
 import { PageContainer } from "./page-container"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
+import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
 import { formatTimestamp } from "@/lib/timezones"
+import { renderEventSummary, getMatchedRuleBadges, DynamicFieldRule } from "@/lib/template-formatter"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
-interface PlaybackEvent {
+interface DashboardEvent {
   id: string
   device_id: string
+  sub_device_id?: string | null
   timestamp: string | number
   type: number
   details: any
 }
 
-// Fallback sample data matching our exact database schema
-const FALLBACK_EVENTS: PlaybackEvent[] = [
-  {
-    id: "evt_101",
-    device_id: "RMB007",
-    timestamp: Date.now() - 1000 * 45,
-    type: 1,
-    details: {
-      household_context: { hhid: "HH0002", router_id: "RM0008" },
-      device_context: { device_type: "Smart TV", os: "Android TV", hostname: "LivingRoom-TV" },
-      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
-      playback: { bitrate: "1080p", playhead_position: 120, volume_level: 80 },
-    },
-  },
-  {
-    id: "evt_102",
-    device_id: "RM0007",
-    timestamp: Date.now() - 1000 * 90,
-    type: 2,
-    details: {
-      household_context: { hhid: "HH0005", router_id: "RM0009" },
-      device_context: { device_type: "Mobile", os: "iOS", hostname: "Ankur-iPhone" },
-      content: { platform: "Spotify", title: "Spotify Stream", content_type: "Audio" },
-      playback: { bitrate: "320kbps", playhead_position: 240, volume_level: 65 },
-    },
-  },
-  {
-    id: "evt_103",
-    device_id: "RMB007",
-    timestamp: Date.now() - 1000 * 180,
-    type: 2,
-    details: {
-      household_context: { hhid: "HH0002", router_id: "RM0008" },
-      device_context: { device_type: "Smart TV", os: "Android TV", hostname: "LivingRoom-TV" },
-      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
-      playback: { bitrate: "1080p", playhead_position: 7317, volume_level: 80 },
-    },
-  },
-  {
-    id: "evt_104",
-    device_id: "RM0007",
-    timestamp: Date.now() - 1000 * 300,
-    type: 3,
-    details: {
-      household_context: { hhid: "HH0005", router_id: "RM0009" },
-      device_context: { device_type: "Mobile", os: "iOS", hostname: "Ankur-iPhone" },
-      content: { platform: "OTT", title: "Jurassic World Rebirth", content_type: "Movie" },
-      playback: { bitrate: "1080p", playhead_position: 912, volume_level: 75 },
-      reason: "APP_BACKGROUND",
-    },
-  },
-  {
-    id: "evt_105",
-    device_id: "RMB007",
-    timestamp: Date.now() - 1000 * 420,
-    type: 18,
-    details: {
-      household_context: { hhid: "HH0001", router_id: "RM0001" },
-      device_context: { device_type: "Smart TV", os: "webOS", hostname: "LG-OLED-TV" },
-      payload: { human_count: 3, ambient_temp: "24.5C", sensor_status: "ACTIVE" },
-    },
-  },
-  {
-    id: "evt_106",
-    device_id: "RM0008",
-    timestamp: Date.now() - 1000 * 600,
-    type: 1,
-    details: {
-      household_context: { hhid: "HH0003", router_id: "RM0008" },
-      device_context: { device_type: "Smart TV", os: "Tizen", hostname: "Samsung-4K" },
-      content: { platform: "Netflix", title: "Stranger Things S4", content_type: "TV Series" },
-      playback: { bitrate: "4K UHD", playhead_position: 45, volume_level: 90 },
-    },
-  },
-]
+interface PlatformStat {
+  name: string
+  key: string
+  iconUrl: string | null
+  count: number
+  percentage: number
+}
+
+interface TypeDistribution {
+  type: number
+  name: string
+  count: number
+  percentage: number
+}
 
 export function DashboardClient() {
-  const supabase = createClient()
+  const supabase = React.useMemo(() => createClient(), [])
   const { selectedTimezone } = useTimezoneStore()
-  const [events, setEvents] = React.useState<PlaybackEvent[]>(FALLBACK_EVENTS)
-  const [dbEventTypes, setDbEventTypes] = React.useState<Map<number, string>>(new Map())
-  const [activeTab, setActiveTab] = React.useState<"ALL" | "PLAY" | "HEARTBEAT" | "TV" | "DECLARATION">("ALL")
+  const { mode } = useTelemetryModeStore()
+  const isRouter = mode === "router"
+  const isWearable = mode === "wearable"
+
   const [loading, setLoading] = React.useState(true)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [events, setEvents] = React.useState<DashboardEvent[]>([])
+  const [eventTypesMeta, setEventTypesMeta] = React.useState<any[]>([])
+  const [totalEventsCount, setTotalEventsCount] = React.useState<number>(0)
+  const [activeDevicesCount, setActiveDevicesCount] = React.useState<number>(0)
+  const [distinctDeviceIds, setDistinctDeviceIds] = React.useState<string[]>([])
+  const [topPlatforms, setTopPlatforms] = React.useState<PlatformStat[]>([])
+  const [typeDistribution, setTypeDistribution] = React.useState<TypeDistribution[]>([])
+
+  const loadDashboardData = React.useCallback(async () => {
+    try {
+      // 1. Ensure platform mappings are loaded
+      await fetchPlatformMappings()
+
+      const primaryTable = isWearable ? "wearable_events" : isRouter ? "router_events" : "playback_events"
+      const typesEndpoint = isWearable ? "/api/wearable-event-types" : isRouter ? "/api/router-rules" : "/api/events"
+
+      // 2. Fetch parallel stats
+      const [eventsRes, typesRes, totalCountRes, devicesRes] = await Promise.all([
+        supabase
+          .from(primaryTable)
+          .select("*")
+          .order("timestamp", { ascending: false })
+          .limit(60),
+        fetch(typesEndpoint, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({})) as Promise<any>,
+        supabase
+          .from(primaryTable)
+          .select("id", { count: "exact", head: true }),
+        isWearable
+          ? supabase.from("wearable_devices").select("device_id")
+          : supabase.from("devices").select("device_id, is_active"),
+      ])
+
+      // Total counts
+      if (totalCountRes.count !== null && totalCountRes.count !== undefined) {
+        setTotalEventsCount(totalCountRes.count)
+      } else {
+        setTotalEventsCount(eventsRes.data?.length || 0)
+      }
+
+      if (devicesRes.data && devicesRes.data.length > 0) {
+        const activeOnly = devicesRes.data.filter((d: any) => d.is_active !== false).length
+        setActiveDevicesCount(activeOnly || devicesRes.data.length)
+        setDistinctDeviceIds(devicesRes.data.map((d: any) => d.device_id))
+      } else if (eventsRes.data) {
+        const devSet = Array.from(new Set(eventsRes.data.map((d: any) => d.device_id).filter(Boolean))) as string[]
+        setActiveDevicesCount(devSet.length)
+        setDistinctDeviceIds(devSet)
+      }
+
+      // Event types dictionary
+      let loadedTypes: any[] = []
+      if (typesRes.eventTypes && Array.isArray(typesRes.eventTypes)) {
+        loadedTypes = typesRes.eventTypes
+      }
+      setEventTypesMeta(loadedTypes)
+
+      // Format events list
+      if (eventsRes.data && eventsRes.data.length > 0) {
+        const parsedEvents: DashboardEvent[] = eventsRes.data.map((d: any) => {
+          let detailsObj: any = {}
+          if (typeof d.details === "string") {
+            try { detailsObj = JSON.parse(d.details) } catch { detailsObj = {} }
+          } else if (d.details && typeof d.details === "object") {
+            detailsObj = d.details
+          }
+          if (isWearable) {
+            detailsObj = {
+              ...detailsObj,
+              content_type: d.content_type ?? detailsObj.content_type,
+              content: d.content ?? detailsObj.content,
+              wifi_status: d.wifi_status ?? detailsObj.wifi_status,
+              wifi_connected: d.wifi_connected ?? detailsObj.wifi_connected,
+              ssid: d.ssid ?? detailsObj.ssid,
+            }
+          }
+          return {
+            id: String(d.id),
+            device_id: String(d.device_id || (isWearable ? "Wearable" : isRouter ? "Router" : "Device")),
+            sub_device_id: d.sub_device_id ? String(d.sub_device_id) : null,
+            timestamp: d.timestamp,
+            type: Number(d.type || 0),
+            details: detailsObj,
+          }
+        })
+        setEvents(parsedEvents)
+
+        // 3. Compute Top Platforms dynamically (or songs/networks for wearable)
+        const platCounts: Record<string, number> = {}
+        let totalPlatHits = 0
+
+        parsedEvents.forEach((evt) => {
+          let platName = isWearable
+            ? (evt.details?.content || (evt.details?.ssid ? `WiFi: ${evt.details.ssid}` : (evt.details?.wifi_status ? `WiFi ${evt.details.wifi_status}` : null)))
+            : (evt.details?.session?.platform ||
+              evt.details?.session?.platform_canonical ||
+              evt.details?.session_summary?.platform ||
+              evt.details?.domain_activity?.platform ||
+              evt.details?.content?.platform ||
+              null)
+            null
+
+          if (typeof platName === "object" && platName !== null) {
+            platName = platName.platform
+          }
+
+          if (platName && typeof platName === "string" && platName.trim()) {
+            const clean = platName.toLowerCase().trim().replace(/\.com$/, "")
+            platCounts[clean] = (platCounts[clean] || 0) + 1
+            totalPlatHits++
+          }
+        })
+
+        const sortedPlatforms: PlatformStat[] = Object.entries(platCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([key, count]) => {
+            const formattedName = key.charAt(0).toUpperCase() + key.slice(1)
+            const icon = findPlatformIconUrl(key)
+            return {
+              name: formattedName,
+              key,
+              iconUrl: icon,
+              count,
+              percentage: totalPlatHits > 0 ? Math.round((count / totalPlatHits) * 100) : 0,
+            }
+          })
+        setTopPlatforms(sortedPlatforms)
+
+        // 4. Compute Event Type Distribution
+        const typeCounts: Record<number, number> = {}
+        parsedEvents.forEach((evt) => {
+          typeCounts[evt.type] = (typeCounts[evt.type] || 0) + 1
+        })
+
+        const sortedDist: TypeDistribution[] = Object.entries(typeCounts)
+          .map(([typeStr, count]) => {
+            const tNum = Number(typeStr)
+            const matched = loadedTypes.find((t) => t.type === tNum)
+            const name = matched?.name || `TYPE_${tNum}`
+            return {
+              type: tNum,
+              name,
+              count,
+              percentage: parsedEvents.length > 0 ? Math.round((count / parsedEvents.length) * 100) : 0,
+            }
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+
+        setTypeDistribution(sortedDist)
+      } else {
+        setEvents([])
+        setTopPlatforms([])
+        setTypeDistribution([])
+      }
+    } catch (err) {
+      console.error("Dashboard data load error:", err)
+    } finally {
+      setLoading(false)
+      setIsRefreshing(false)
+    }
+  }, [supabase, isRouter])
 
   React.useEffect(() => {
-    async function loadData() {
-      try {
-        const [eventsRes, typesRes] = await Promise.all([
-          supabase
-            .from("playback_events")
-            .select("*")
-            .order("timestamp", { ascending: false })
-            .limit(40),
-          supabase
-            .from("event_types")
-            .select("type, name")
-            .order("type", { ascending: true })
-        ])
+    setLoading(true)
+    loadDashboardData()
+  }, [loadDashboardData])
 
-        if (!typesRes.error && typesRes.data) {
-          const typeMap = new Map<number, string>()
-          typesRes.data.forEach((t: any) => {
-            if (t.type !== undefined && t.name) {
-              typeMap.set(Number(t.type), String(t.name))
-            }
-          })
-          setDbEventTypes(typeMap)
-        }
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await loadDashboardData()
+  }
 
-        if (!eventsRes.error && eventsRes.data && eventsRes.data.length > 0) {
-          const parsed = eventsRes.data.map((d: any) => {
-            let detailsObj = {}
-            if (typeof d.details === "string") {
-              try { detailsObj = JSON.parse(d.details) } catch { detailsObj = {} }
-            } else if (d.details && typeof d.details === "object") {
-              detailsObj = d.details
-            }
-            return {
-              id: String(d.id),
-              device_id: String(d.device_id || "RM0001"),
-              timestamp: d.timestamp,
-              type: Number(d.type),
-              details: detailsObj,
-            }
-          })
-          setEvents(parsed)
-        }
-      } catch (e) {
-        console.error("Dashboard loadData error:", e)
-      } finally {
-        setLoading(false)
-      }
+  // Active streaming sessions count
+  const activeSessionsCount = React.useMemo(() => {
+    if (isRouter) {
+      return events.filter(e => e.type === 5 || e.type === 4 || e.type === 3).length
     }
-    loadData()
-  }, [supabase])
-
-  const STATIC_TYPE_NAMES: Record<number, string> = {
-    1: "PLAY_START",
-    2: "PLAY_HEARTBEAT",
-    3: "PLAY_PAUSE",
-    4: "PLAY_RESUME",
-    5: "PLAY_END",
-    6: "CONTENT_CHANGE",
-    7: "TV_ON",
-    8: "TV_OFF",
-    18: "NETWORK_DECLARATION",
-  }
-
-  const getTypeName = (type: number): string => {
-    return dbEventTypes.get(type) || STATIC_TYPE_NAMES[type] || `EVENT_TYPE_${type}`
-  }
-
-  const getTypeBadgeClass = (type: number): string => {
-    switch (type) {
-      case 1: return "bg-[#1C2B42] text-[#579DFF] border-[#579DFF]/30"
-      case 2: return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-      case 3: return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-      case 4: return "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
-      case 5: return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
-      case 6: return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
-      case 7: return "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"
-      case 8: return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
-      case 18: return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
-      default: return "bg-muted text-muted-foreground border-border"
-    }
-  }
-
-  // Count tab events dynamically
-  const playCount = events.filter(e => e.type === 1 || e.type === 3 || e.type === 4 || e.type === 5 || e.type === 6).length
-  const heartbeatCount = events.filter(e => e.type === 2).length
-  const tvCount = events.filter(e => e.type === 7 || e.type === 8).length
-  const declCount = events.filter(e => e.type === 18).length
-
-  // Filter events based on active tab & limit to latest 8
-  const filteredEvents = React.useMemo(() => {
-    let list = events
-    if (activeTab === "PLAY") list = events.filter(e => e.type === 1 || e.type === 3 || e.type === 4 || e.type === 5 || e.type === 6)
-    else if (activeTab === "HEARTBEAT") list = events.filter(e => e.type === 2)
-    else if (activeTab === "TV") list = events.filter(e => e.type === 7 || e.type === 8)
-    else if (activeTab === "DECLARATION") list = events.filter(e => e.type === 18)
-    return list.slice(0, 8)
-  }, [events, activeTab])
-
-  // Aggregate stats
-  const activeStreamsCount = events.filter(e => e.type === 1 || e.type === 2).length
-  const uniqueDevices = Array.from(new Set(events.map(e => e.device_id))).length
+    return events.filter(e => e.type === 1 || e.type === 2).length
+  }, [events, isRouter])
 
   return (
     <PageContainer
-      title="Overview & Highlights"
-      description="Centralized telemetry monitor, router event stream & live system diagnostics."
+      title="Telemetry Dashboard"
+      description={
+        <span className="flex items-center gap-2 flex-wrap">
+          <span>Live operational telemetry, event velocity, active hardware meters, and media distribution.</span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-muted border border-border">
+            {isWearable ? (
+              <Watch className="size-3 text-emerald-500" />
+            ) : isRouter ? (
+              <Radio className="size-3 text-sky-500" />
+            ) : (
+              <Tv className="size-3 text-primary" />
+            )}
+            {isWearable ? "Wearable Telemetry" : isRouter ? "Router Telemetry" : "SDK Telemetry"}
+          </span>
+        </span>
+      }
     >
-      <div className="space-y-8">
+      <div className="flex flex-col gap-6 min-w-0">
         
         {/* ====================================================================
-            SECTION 1: Confluence "Pick up where you left off" Quick Access Grid
+            TOP KPI CARDS (4 Essential Operational Metrics)
            ==================================================================== */}
-        <div className="space-y-3">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-            Pick up where you left off
-          </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          
+          {/* Metric 1: Total Events Logged */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs space-y-2">
+            <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+              <span>{isWearable ? "Total Wearable Events" : isRouter ? "Total Router Events" : "Total Playback Events"}</span>
+              <Database className="size-4 text-primary" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold font-mono text-foreground">
+                {loading ? "..." : totalEventsCount.toLocaleString()}
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                Live Ingest
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {isWearable ? "Stored in wearable_events table" : isRouter ? "Stored in router_events table" : "Stored in playback_events table"}
+            </p>
+          </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Card 1: Events Explorer */}
-            <Link
-              href="/events"
-              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="size-8 rounded-md bg-[#1C2B42] text-[#579DFF] flex items-center justify-center shrink-0">
-                    <Database className="size-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
-                      Events Explorer
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
-                      Live Telemetry Stream
-                    </p>
-                  </div>
-                </div>
-                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
-              </div>
+          {/* Metric 2: Active Devices */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs space-y-2">
+            <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+              <span>{isWearable ? "Active Wearables" : isRouter ? "Active Router Meters" : "Active Playback Clients"}</span>
+              {isWearable ? <Watch className="size-4 text-emerald-500" /> : <RouterIcon className="size-4 text-purple-500" />}
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold font-mono text-foreground">
+                {loading ? "..." : activeDevicesCount}
+              </span>
+              <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                Operational
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {distinctDeviceIds.length} total registered hardware units
+            </p>
+          </div>
 
-              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
-                <span>{events.length} packets logged</span>
-                <span className="text-[#579DFF]">Live feed</span>
-              </div>
-            </Link>
+          {/* Metric 3: Active Sessions / Streams */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs space-y-2">
+            <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+              <span>{isWearable ? "Song Matches & Carrier" : isRouter ? "Tracked Sessions" : "Active Media Streams"}</span>
+              <Activity className="size-4 text-emerald-500" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold font-mono text-foreground">
+                {loading ? "..." : activeSessionsCount}
+              </span>
+              <span className="text-[10px] font-semibold text-sky-500 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                Recent 60s
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {isWearable ? "Acoustic mic watermark & song detections" : isRouter ? "OTT viewing & ADB domain activity" : "Playback starts & heartbeats"}
+            </p>
+          </div>
 
-            {/* Card 2: System Rules */}
-            <Link
-              href="/rules"
-              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="size-8 rounded-md bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
-                    <SlidersHorizontal className="size-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
-                      Rules Engine
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
-                      Routing Logic & Triggers
-                    </p>
-                  </div>
-                </div>
-                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
-              </div>
-
-              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
-                <span>12 active rules</span>
-                <span className="text-emerald-400">All passing</span>
-              </div>
-            </Link>
-
-            {/* Card 3: Event Mapping */}
-            <Link
-              href="/event-mapping"
-              className="group bg-card hover:bg-muted/40 border border-border rounded-lg p-4 transition-all flex flex-col justify-between h-32 hover:border-[#579DFF]/40 shadow-2xs sm:col-span-2 lg:col-span-1"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="size-8 rounded-md bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
-                    <GitFork className="size-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-foreground group-hover:text-[#579DFF] transition-colors">
-                      Event Mapping
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
-                      Payload Schema Mapping
-                    </p>
-                  </div>
-                </div>
-                <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-[#579DFF] transition-all" />
-              </div>
-
-              <div className="text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40 flex items-center justify-between">
-                <span>Types 1..18 configured</span>
-                <span className="text-sky-400">100% mapped</span>
-              </div>
-            </Link>
+          {/* Metric 4: Platform Rules & Schema Integrity */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs space-y-2">
+            <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+              <span>Rules & Schema Status</span>
+              <CheckCircle2 className="size-4 text-emerald-500" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold font-mono text-foreground">
+                {eventTypesMeta.length > 0 ? `${eventTypesMeta.length} Types` : "100%"}
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                DB Synced
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              All field badges evaluated dynamically
+            </p>
           </div>
         </div>
 
         {/* ====================================================================
-            SECTION 2: Main Grid (Feed Stream + Sidebar Widgets)
+            MIDDLE SECTION: Top Platforms & Event Distribution Breakdowns
            ==================================================================== */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           
-          {/* Left Column: Live Feed Stream (2 Cols wide) */}
-          <div className="lg:col-span-2 space-y-4">
-            
-            {/* Feed Section Title & Pill Tabs (Confluence Style) */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Flame className="size-4 text-[#579DFF]" />
-                <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                  Discover what's happening
-                </h2>
+          {/* Card 1: Top Active Platforms */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                <div className="flex items-center gap-2">
+                  <Layers className="size-4 text-primary" />
+                  <h3 className="font-semibold text-sm text-foreground">
+                    {isWearable ? "Acoustic Hits & Networks" : "Top Active Platforms"}
+                  </h3>
+                </div>
+                <Link
+                  href="/platform-mapping"
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <span>Mappings</span>
+                  <ExternalLink className="size-3" />
+                </Link>
               </div>
 
-              {/* Confluence Pill Tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("ALL")}
-                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
-                    activeTab === "ALL"
-                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                  }`}
-                >
-                  All ({events.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("PLAY")}
-                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
-                    activeTab === "PLAY"
-                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                  }`}
-                >
-                  Playback ({playCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("HEARTBEAT")}
-                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
-                    activeTab === "HEARTBEAT"
-                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                  }`}
-                >
-                  Heartbeats ({heartbeatCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("TV")}
-                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
-                    activeTab === "TV"
-                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                  }`}
-                >
-                  TV Power ({tvCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("DECLARATION")}
-                  className={`px-3 py-1 text-xs rounded-full font-medium transition-all cursor-pointer ${
-                    activeTab === "DECLARATION"
-                      ? "bg-[#1C2B42] text-[#579DFF] font-semibold border border-[#579DFF]/30"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                  }`}
-                >
-                  Declarations ({declCount})
-                </button>
+              <div className="divide-y divide-border/40 mt-1">
+                {topPlatforms.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground font-mono">
+                    No platform session hits detected in recent stream.
+                  </div>
+                ) : (
+                  topPlatforms.map((plat) => (
+                    <div key={plat.key} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {plat.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={plat.iconUrl}
+                            alt={plat.name}
+                            className="size-5 rounded object-contain border border-border/60 bg-muted/20 shrink-0"
+                          />
+                        ) : (
+                          <div className="size-5 rounded bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground border border-border">
+                            {plat.name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="font-semibold text-foreground truncate">{plat.name}</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="w-24 bg-muted h-2 rounded-full overflow-hidden hidden sm:block">
+                          <div
+                            className="bg-primary h-full rounded-full transition-all duration-500"
+                            style={{ width: `${plat.percentage}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-[11px] text-muted-foreground w-12 text-right">
+                          {plat.percentage}%
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
-            {/* Live Feed Card List */}
-            <div className="space-y-3">
-              {filteredEvents.map((evt) => {
-                const devType = evt.details?.device_context?.device_type || "Smart TV"
-                let contentTitle = evt.details?.content?.title || evt.details?.payload?.sensor_status
-                if (!contentTitle) {
-                  if (evt.type === 7) contentTitle = "TV Turned On"
-                  else if (evt.type === 8) contentTitle = "TV Turned Off"
-                  else if (evt.type === 6) contentTitle = evt.details?.new_content?.title || "Content Changed"
-                  else if (evt.type === 3) contentTitle = "Playback Paused"
-                  else if (evt.type === 5) contentTitle = "Playback Finished"
-                  else contentTitle = "Live Telemetry"
-                }
+            <div className="pt-3 border-t border-border/40 text-[11px] text-muted-foreground flex items-center justify-between">
+              <span>Automatic OTT CDN and DNS resolution</span>
+              <span className="text-emerald-500 font-medium">15 Platforms Mapped</span>
+            </div>
+          </div>
 
-                const platform = evt.details?.content?.platform || (evt.type === 7 || evt.type === 8 ? evt.details?.device_context?.os || "Smart TV" : "OTT")
-                const hhid = evt.details?.household_context?.hhid || "HH0002"
-                const bitrate = evt.details?.playback?.bitrate || (evt.type === 7 || evt.type === 8 ? null : "1080p")
-                const playhead = evt.details?.playback?.playhead_position || evt.details?.playhead_position || 0
+          {/* Card 2: Telemetry Event Type Distribution */}
+          <div className="p-4 bg-card border border-border rounded-lg shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                <div className="flex items-center gap-2">
+                  <Activity className="size-4 text-purple-500" />
+                  <h3 className="font-semibold text-sm text-foreground">Event Type Distribution</h3>
+                </div>
+                <Link
+                  href="/rules"
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <span>Rules Engine</span>
+                  <ExternalLink className="size-3" />
+                </Link>
+              </div>
 
-                return (
-                  <div
-                    key={evt.id}
-                    className="bg-card border border-border rounded-lg p-4 hover:border-border/80 transition-all space-y-2.5 shadow-2xs"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        {/* Device Avatar Circle */}
-                        <div className="size-9 rounded-full bg-muted border border-border flex items-center justify-center shrink-0 text-foreground font-semibold">
-                          {devType.toLowerCase().includes("mobile") ? (
-                            <Smartphone className="size-4 text-[#579DFF]" />
-                          ) : (
-                            <Tv className="size-4 text-emerald-400" />
-                          )}
+              <div className="divide-y divide-border/40 mt-1">
+                {typeDistribution.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground font-mono">
+                    No event type records available to analyze.
+                  </div>
+                ) : (
+                  typeDistribution.map((dist) => (
+                    <div key={dist.type} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          T{dist.type}
+                        </span>
+                        <span className="font-medium text-foreground truncate">{dist.name}</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="w-24 bg-muted h-2 rounded-full overflow-hidden hidden sm:block">
+                          <div
+                            className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${dist.percentage}%` }}
+                          />
                         </div>
+                        <span className="font-mono text-[11px] text-muted-foreground w-16 text-right">
+                          {dist.count} ({dist.percentage}%)
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-xs text-foreground">
-                              {evt.device_id}
+            <div className="pt-3 border-t border-border/40 text-[11px] text-muted-foreground flex items-center justify-between">
+              <span>Telemetry schema classification</span>
+              <span className="text-primary font-medium">PostgreSQL Managed</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ====================================================================
+            RECENT REAL-TIME TELEMETRY STREAM TABLE
+           ==================================================================== */}
+        <div className="border border-border bg-card rounded-lg overflow-hidden shadow-2xs">
+          <div className="p-3 border-b border-border flex items-center justify-between gap-3 bg-muted/10">
+            <div className="flex items-center gap-2">
+              <Flame className="size-4 text-amber-500" />
+              <span className="font-bold text-xs text-foreground uppercase tracking-wider">
+                Live Ingestion Stream (Recent 10 Events)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2 gap-1 cursor-pointer"
+                onClick={handleRefresh}
+                title="Refresh Live Data"
+              >
+                <RefreshCw className={cn("size-3", isRefreshing && "animate-spin")} />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+              <Link
+                href="/events"
+                className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline ml-1"
+              >
+                <span>Open in Events Explorer</span>
+                <ChevronRight className="size-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto w-full min-w-0 custom-scrollbar">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-[11px] font-bold text-muted-foreground uppercase select-none font-mono">
+                  <th className="py-2.5 px-3 w-36">Timestamp</th>
+                  <th className="py-2.5 px-3 w-40">Event Type</th>
+                  <th className="py-2.5 px-3 w-32">{isRouter ? "Router ID" : "Device ID"}</th>
+                  <th className="py-2.5 px-3">Summary & Applied Field Rules</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-xs">
+                {events.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-muted-foreground font-mono">
+                      No events currently logged in this telemetry mode.
+                    </td>
+                  </tr>
+                ) : (
+                  events.slice(0, 10).map((evt) => {
+                    const matchedType = eventTypesMeta.find((t) => t.type === evt.type)
+                    const summary = renderEventSummary(
+                      evt.details,
+                      matchedType?.template,
+                      matchedType?.field_rules,
+                      evt.type
+                    )
+                    const matchedBadges = getMatchedRuleBadges(evt.details, matchedType?.field_rules)
+
+                    // Platform logo resolution
+                    const domPlatform = evt.details?.domain_activity?.platform
+                    const platformName = typeof domPlatform === "object"
+                      ? domPlatform.platform
+                      : (
+                          domPlatform ||
+                          evt.details?.content?.platform ||
+                          evt.details?.session?.platform ||
+                          evt.details?.session?.platform_canonical ||
+                          evt.details?.session_summary?.platform ||
+                          null
+                        )
+                    const iconUrl = platformName ? findPlatformIconUrl(String(platformName)) : null
+
+                    let displaySummary = summary
+                    if (iconUrl && platformName && displaySummary.startsWith("[")) {
+                      const platRegex = new RegExp(`^\\[${String(platformName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\s*`, "i")
+                      displaySummary = displaySummary.replace(platRegex, "")
+                    }
+                    matchedBadges.forEach((b) => {
+                      if (b.display_text) {
+                        displaySummary = displaySummary
+                          .replace(new RegExp(`^\\[${b.display_text}\\]\\s*`, "i"), "")
+                          .replace(new RegExp(`\\bReason:\\s*${b.display_text}\\b\\s*•?`, "i"), "")
+                          .replace(/\s*•\s*(?=•|$)/g, "")
+                          .replace(/^\s*•\s*/, "")
+                          .trim()
+                      }
+                    })
+
+                    return (
+                      <tr key={evt.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-3 text-muted-foreground font-mono whitespace-nowrap">
+                          {formatTimestamp(evt.timestamp, selectedTimezone)}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-muted text-foreground border border-border">
+                            {matchedType?.name || `TYPE_${evt.type}`}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold font-mono text-foreground truncate">
+                          {evt.device_id}
+                          {evt.sub_device_id && (
+                            <span className="text-muted-foreground text-[10px] ml-1">
+                              ({evt.sub_device_id})
                             </span>
-                            <span className="text-[11px] text-muted-foreground">•</span>
-                            <span className="text-xs text-foreground font-medium">
-                              {devType}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">—</span>
-                            <span className="text-xs font-semibold text-[#579DFF] truncate max-w-[220px]">
-                              {contentTitle}
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 truncate max-w-[500px]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            {iconUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={iconUrl}
+                                alt={String(platformName)}
+                                className="size-4 rounded shrink-0 object-contain border border-border/60 bg-muted/20"
+                              />
+                            )}
+                            {matchedBadges.map((badge: DynamicFieldRule) => (
+                              <span
+                                key={badge.id || badge.display_text}
+                                className={cn(
+                                  "px-1.5 py-0.2 rounded text-[10px] font-mono font-bold shrink-0 border uppercase tracking-wider",
+                                  badge.badge_color === "success" && "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+                                  badge.badge_color === "info" && "bg-sky-500/15 text-sky-400 border-sky-500/30",
+                                  badge.badge_color === "warning" && "bg-amber-500/15 text-amber-400 border-amber-500/30",
+                                  badge.badge_color === "destructive" && "bg-rose-500/15 text-rose-400 border-rose-500/30",
+                                  (!badge.badge_color || badge.badge_color === "default") && "bg-muted text-muted-foreground border-border"
+                                )}
+                              >
+                                {badge.display_text}
+                              </span>
+                            ))}
+                            <span className="truncate text-foreground/90 font-mono text-[11px]">
+                              {displaySummary || "-"}
                             </span>
                           </div>
-
-                          <p className="text-[11px] text-muted-foreground mt-0.5 font-mono flex items-center gap-1.5 flex-wrap">
-                            <span>Household: <span className="text-foreground">{hhid}</span></span>
-                            <span>•</span>
-                            <span className="inline-flex items-center gap-1">
-                              <span>Platform:</span>
-                              {findPlatformIconUrl(platform) ? (
-                                <img
-                                  src={findPlatformIconUrl(platform)!}
-                                  alt={platform}
-                                  className="size-3.5 rounded-xs object-cover border border-border/80 shadow-2xs select-none"
-                                  title={platform}
-                                />
-                              ) : null}
-                              <span className="text-foreground font-semibold">{platform}</span>
-                            </span>
-                            {bitrate && (
-                              <>
-                                <span>•</span>
-                                <span>Bitrate: <span className="text-foreground">{bitrate}</span></span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Event Type Badge */}
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border shrink-0 ${getTypeBadgeClass(evt.type)}`}>
-                        {getTypeName(evt.type)}
-                      </span>
-                    </div>
-
-                    {/* Footer Details */}
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-2 border-t border-border/40">
-                      <div className="flex items-center gap-3">
-                        {playhead > 0 && <span>Playhead: {playhead}s</span>}
-                        {evt.details?.reason && <span>Reason: {evt.details.reason}</span>}
-                        {evt.type === 7 && <span className="text-teal-400 font-semibold">Status: Screen ON</span>}
-                        {evt.type === 8 && <span className="text-slate-400 font-semibold">Status: Screen OFF</span>}
-                        {evt.details?.payload?.human_count && (
-                          <span className="text-emerald-400 font-semibold">
-                            Human Count: {evt.details.payload.human_count} | Temp: {evt.details.payload.ambient_temp}
-                          </span>
-                        )}
-                      </div>
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3 text-muted-foreground" />
-                        {formatTimestamp(evt.timestamp, selectedTimezone)}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* Right Column: Widgets */}
-          <div className="space-y-6">
-            
-            {/* Widget 1: System Telemetry Stats */}
-            <div className="bg-card border border-border rounded-lg p-4 space-y-4 shadow-2xs">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                System Diagnostics
-              </h3>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-muted/40 rounded-md border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-medium block">Active Streams</span>
-                  <span className="text-lg font-bold text-foreground font-mono mt-0.5 block">{activeStreamsCount}</span>
-                </div>
-                <div className="p-3 bg-muted/40 rounded-md border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-medium block">Active Routers</span>
-                  <span className="text-lg font-bold text-foreground font-mono mt-0.5 block">{uniqueDevices}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-border/40">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">WAN Ingestion Speed</span>
-                  <span className="font-mono font-semibold text-foreground">14.8 Mbps</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Parse Error Rate</span>
-                  <span className="font-mono font-semibold text-emerald-400">0.00%</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Active Meters</span>
-                  <span className="font-mono font-semibold text-[#579DFF]">100% Operational</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Widget 2: Popular Content Streamed */}
-            <div className="bg-card border border-border rounded-lg p-4 space-y-3 shadow-2xs">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                Top Streamed Media
-              </h3>
-
-              <div className="space-y-2.5 text-xs">
-                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Tv className="size-3.5 text-[#579DFF] shrink-0" />
-                    <span className="font-medium text-foreground truncate">Jurassic World Rebirth</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">OTT</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Smartphone className="size-3.5 text-emerald-400 shrink-0" />
-                    <span className="font-medium text-foreground truncate">Spotify Stream</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">Audio</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Tv className="size-3.5 text-purple-400 shrink-0" />
-                    <span className="font-medium text-foreground truncate">Stranger Things S4</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">Netflix</span>
-                </div>
-              </div>
-            </div>
-
+          <div className="p-3 border-t border-border bg-muted/20 text-xs text-muted-foreground flex items-center justify-between">
+            <span>Displaying latest events streaming from Supabase</span>
+            <Link
+              href="/events"
+              className="text-primary hover:underline font-medium flex items-center gap-1"
+            >
+              <span>Explore all records</span>
+              <ArrowUpRight className="size-3" />
+            </Link>
           </div>
-
         </div>
 
       </div>

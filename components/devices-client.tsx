@@ -17,7 +17,11 @@ import {
   Trash2,
   Laptop,
   AlertTriangle,
+  Watch,
+  Radio,
+  Tv,
 } from "lucide-react"
+import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
 import { timezones, mapLabelToIana, formatTimestamp } from "@/lib/timezones"
 import { PageContainer } from "./page-container"
@@ -33,11 +37,8 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  ButtonGroup,
-  ButtonGroupText,
-  ButtonGroupSeparator,
-} from "@/components/ui/button-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import {
   Select,
   SelectContent,
@@ -57,6 +58,9 @@ interface Device {
 
 export function DevicesClient() {
   const { selectedTimezone } = useTimezoneStore()
+  const { mode } = useTelemetryModeStore()
+  const isRouter = mode === "router"
+  const isWearable = mode === "wearable"
   const [devices, setDevices] = React.useState<Device[]>([])
   const [selectedDevice, setSelectedDevice] = React.useState<Device | null>(null)
   
@@ -144,6 +148,50 @@ export function DevicesClient() {
   // Fetch Devices from Supabase
   const fetchDevices = React.useCallback(async () => {
     try {
+      if (isWearable) {
+        const { data: wDevs } = await supabase
+          .from("wearable_devices")
+          .select("*")
+          .order("created_at", { ascending: false })
+        if (wDevs && wDevs.length > 0) {
+          setDevices(
+            wDevs.map((d: any) => ({
+              device_id: d.device_id,
+              secret_hash: "",
+              is_active: true,
+              label: d.name || "Wearable Device",
+              created_at: d.created_at,
+              last_seen_at: d.last_seen_at,
+            }))
+          )
+          return
+        }
+        // Fallback: get distinct device_id from wearable_events
+        const { data: wEvts } = await supabase
+          .from("wearable_events")
+          .select("device_id, timestamp")
+          .order("timestamp", { ascending: false })
+          .limit(100)
+        if (wEvts && wEvts.length > 0) {
+          const map = new Map<string, string>()
+          wEvts.forEach((e: any) => {
+            if (e.device_id && !map.has(e.device_id)) {
+              map.set(e.device_id, e.timestamp)
+            }
+          })
+          const fallbackDevs = Array.from(map.entries()).map(([dId, ts]) => ({
+            device_id: dId,
+            secret_hash: "",
+            is_active: true,
+            label: "Wearable Device",
+            created_at: ts,
+            last_seen_at: ts,
+          }))
+          setDevices(fallbackDevs)
+          return
+        }
+      }
+
       const { data, error } = await supabase
         .from("devices")
         .select("*")
@@ -157,7 +205,7 @@ export function DevicesClient() {
     } catch (e) {
       setDevices([])
     }
-  }, [supabase])
+  }, [supabase, isWearable])
 
   // Trigger manual refresh
   const handleRefresh = async () => {
@@ -299,344 +347,375 @@ export function DevicesClient() {
 
   return (
     <PageContainer
-      title="Devices"
+      title={isWearable ? "Wearable Devices" : "Devices"}
       description={
-        <span className="flex flex-wrap gap-2 items-center">
-          <span>Register, configure, and monitor router meter hardware installations across active households.</span>
-          <span className="bg-primary/10 text-primary text-[10px] font-mono font-medium px-2 py-0.5 rounded border border-primary/20 shrink-0">
-            Timezone: {getCleanTimezoneName(selectedTimezone)}
+        <span className="flex items-center gap-2 flex-wrap">
+          <span>
+            {isWearable
+              ? "Register, track, and monitor wearable telemetry devices, battery states, and acoustic microphones."
+              : "Register, configure, and monitor router meter hardware installations across active households."}
+          </span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-muted border border-border">
+            {isWearable ? (
+              <Watch className="size-3 text-emerald-500" />
+            ) : isRouter ? (
+              <Radio className="size-3 text-sky-500" />
+            ) : (
+              <Tv className="size-3 text-primary" />
+            )}
+            {isWearable ? "Wearable Telemetry" : isRouter ? "Router Telemetry" : "SDK Telemetry"}
           </span>
         </span>
       }
     >
-
-      {/* Main Database Grid Editor Container */}
-      <div className="flex flex-col border border-border bg-card rounded-lg shadow-2xs overflow-hidden w-full min-w-0">
-        {/* Supabase Table Filter Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/5 border-b border-border text-xs select-none">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Search Filter using ButtonGroup */}
-            <ButtonGroup>
+      <div className="flex flex-col gap-3 min-w-0">
+        
+        {/* Unified Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-card border border-border rounded-lg shadow-2xs text-xs">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+            
+            {/* Grouped Search Field + Input */}
+            <div className="flex items-center flex-1 min-w-[240px] sm:min-w-[300px] rounded-md border border-border bg-background focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all shadow-2xs">
               <Select
                 value={stagedSearchField}
                 onValueChange={(val) => setStagedSearchField(val as any)}
               >
-                <SelectTrigger className="h-8 text-xs font-mono font-medium bg-muted/20 border-border text-foreground">
-                  <Search className="size-3.5 text-muted-foreground shrink-0 mr-1" />
-                  <SelectValue placeholder="Field" />
+                <SelectTrigger className="h-8 text-xs w-[110px] shrink-0 border-0 border-r border-border rounded-r-none bg-muted/30 font-medium focus:ring-0 shadow-none">
+                  <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="device_id">device_id</SelectItem>
-                  <SelectItem value="label">label</SelectItem>
+                <SelectContent className="text-xs">
+                  <SelectItem value="device_id">Device ID</SelectItem>
+                  <SelectItem value="label">Label</SelectItem>
                 </SelectContent>
               </Select>
-              <Input
-                type="text"
-                placeholder={`Filter by ${stagedSearchField}...`}
-                value={stagedSearchTerm}
-                onChange={(e) => setStagedSearchTerm(e.target.value)}
-                className="h-8 text-xs w-44 sm:w-60 bg-background"
-              />
-              {stagedSearchTerm && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setStagedSearchTerm("")}
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title="Clear search"
-                >
-                  <X className="size-3.5" />
-                </Button>
-              )}
-            </ButtonGroup>
 
-            {/* Active Status Filter */}
+              <div className="relative flex-1 flex items-center">
+                <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder={`Search ${stagedSearchField === "device_id" ? "by device ID" : "by label"}...`}
+                  value={stagedSearchTerm}
+                  onChange={(e) => setStagedSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleApplyFilters()
+                    }
+                  }}
+                  className="h-8 pl-8 pr-8 text-xs border-0 rounded-l-none focus-visible:ring-0 shadow-none bg-transparent"
+                />
+                {stagedSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setStagedSearchTerm("")}
+                    className="absolute right-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Status Select */}
             <Select
               value={stagedStatusFilter}
               onValueChange={(val) => setStagedStatusFilter(val || "ALL")}
             >
-              <SelectTrigger className="flex items-center gap-1.5 px-2.5 border border-border bg-background hover:bg-muted/30 rounded-md h-8 text-xs text-foreground font-medium cursor-pointer transition-all shadow-none focus:ring-0 focus:ring-offset-0">
-                <SlidersHorizontal className="size-3.5 text-muted-foreground/60 shrink-0" />
-                <SelectValue placeholder="Status">
-                  {stagedStatusFilter === "ALL" ? "All Statuses" : stagedStatusFilter === "ACTIVE" ? "Active Only" : "Inactive Only"}
-                </SelectValue>
+              <SelectTrigger className="h-8 text-xs w-[125px] font-medium bg-background border-border shadow-2xs">
+                <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="text-xs">
                 <SelectItem value="ALL">All Statuses</SelectItem>
                 <SelectItem value="ACTIVE">Active Only</SelectItem>
                 <SelectItem value="INACTIVE">Inactive Only</SelectItem>
               </SelectContent>
             </Select>
 
-            {/* Columns Select Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowColumnDropdown(!showColumnDropdown)}
-                className="flex items-center gap-1.5 px-2.5 border border-border rounded-md h-8 bg-background hover:bg-muted/30 cursor-pointer text-xs text-foreground select-none font-medium transition-all"
-              >
-                <Columns3 className="size-3.5 shrink-0" />
-                <span>Columns ({activeColumnsCount}/5)</span>
+            {/* Columns Visibility Popover */}
+            <Popover>
+              <PopoverTrigger className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-background hover:bg-muted/30 text-xs font-medium cursor-pointer shadow-2xs">
+                <Columns3 className="size-3.5 text-muted-foreground" />
+                <span>Columns</span>
                 <ChevronDown className="size-3 text-muted-foreground/60" />
-              </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-2 text-xs space-y-1">
+                <div className="font-semibold px-2 py-1 text-[11px] text-muted-foreground border-b border-border/60 uppercase tracking-wider">
+                  Toggle Columns
+                </div>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.device_id}
+                    onChange={() => toggleColumn("device_id")}
+                    className="size-3.5 rounded border-border"
+                  />
+                  <span>Device ID</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.label}
+                    onChange={() => toggleColumn("label")}
+                    className="size-3.5 rounded border-border"
+                  />
+                  <span>Label</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.is_active}
+                    onChange={() => toggleColumn("is_active")}
+                    className="size-3.5 rounded border-border"
+                  />
+                  <span>Status</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.created_at}
+                    onChange={() => toggleColumn("created_at")}
+                    className="size-3.5 rounded border-border"
+                  />
+                  <span>Created At</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.last_seen_at}
+                    onChange={() => toggleColumn("last_seen_at")}
+                    className="size-3.5 rounded border-border"
+                  />
+                  <span>Last Seen</span>
+                </label>
+              </PopoverContent>
+            </Popover>
 
-              {showColumnDropdown && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowColumnDropdown(false)} />
-                  <div className="absolute left-0 mt-1.5 w-44 bg-popover border border-border rounded-lg shadow-lg z-20 p-2 text-xs text-foreground space-y-1">
-                    {Object.keys(visibleColumns).map((col) => (
-                      <label key={col} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/50 rounded-md cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns[col as keyof typeof visibleColumns]}
-                          onChange={() => toggleColumn(col as keyof typeof visibleColumns)}
-                          className="rounded border-border text-primary focus:ring-primary size-3.5"
-                        />
-                        <span>{col}</span>
-                      </label>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Apply & Remove Filters Action Buttons using ButtonGroup */}
-            {(hasChanges || isFilterApplied) && (
-              <ButtonGroup>
-                {hasChanges && (
-                  <Button
-                    onClick={handleApplyFilters}
-                    size="sm"
-                    className="h-8 font-semibold cursor-pointer flex items-center gap-1 animate-pulse"
-                  >
-                    <Check className="size-3.5" />
-                    Apply
-                  </Button>
-                )}
-                {isFilterApplied && (
-                  <Button
-                    onClick={handleClearFilters}
-                    variant="destructive"
-                    size="sm"
-                    className="h-8 font-semibold transition-all cursor-pointer flex items-center gap-1"
-                  >
-                    <X className="size-3.5" />
-                    Remove
-                  </Button>
-                )}
-              </ButtonGroup>
-            )}
-          </div>
-
-          {/* Right side Actions */}
-          <div className="flex items-center gap-2">
+            {/* Refresh Button */}
             <Button
               onClick={handleRefresh}
               variant="outline"
-              size="icon"
+              size="sm"
+              className="h-8 px-2.5 cursor-pointer shadow-2xs"
               title="Refresh devices"
             >
-              <RefreshCw className={`size-3.5 text-muted-foreground ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={cn("size-3.5 text-muted-foreground", isRefreshing && "animate-spin")} />
+            </Button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1.5 ml-auto sm:ml-0 shrink-0">
+            <Button size="sm" className="h-8 text-xs font-semibold px-3 cursor-pointer" onClick={handleApplyFilters}>
+              Apply
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground px-2 cursor-pointer" onClick={handleClearFilters}>
+              Reset
             </Button>
           </div>
         </div>
 
-        {/* Main Content Table */}
-        <div className="overflow-x-auto w-full min-w-0 custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[900px]">
-            <thead>
-              <tr className="border-b bg-muted/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none font-mono">
-                {visibleColumns.device_id && (
-                  <th
-                    style={{ width: `${colWidths.device_id || 180}px`, minWidth: `${colWidths.device_id || 180}px` }}
-                    className="p-3 border-r border-border/40 relative group/th"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Type className="size-3 text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">device_id</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
-                    </div>
-                    <div
-                      onMouseDown={(e) => handleColumnResize(e, "device_id")}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
-                      title="Drag to resize column"
-                    />
-                  </th>
-                )}
-                {visibleColumns.label && (
-                  <th
-                    style={{ width: `${colWidths.label || 200}px`, minWidth: `${colWidths.label || 200}px` }}
-                    className="p-3 border-r border-border/40 relative group/th"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Laptop className="size-3 text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">label</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">text</span>
-                    </div>
-                    <div
-                      onMouseDown={(e) => handleColumnResize(e, "label")}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
-                      title="Drag to resize column"
-                    />
-                  </th>
-                )}
-                {visibleColumns.is_active && (
-                  <th
-                    style={{ width: `${colWidths.is_active || 130}px`, minWidth: `${colWidths.is_active || 130}px` }}
-                    className="p-3 border-r border-border/40 relative group/th"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <ToggleLeft className="size-3 text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">is_active</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">bool</span>
-                    </div>
-                    <div
-                      onMouseDown={(e) => handleColumnResize(e, "is_active")}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
-                      title="Drag to resize column"
-                    />
-                  </th>
-                )}
-                {visibleColumns.created_at && (
-                  <th
-                    style={{ width: `${colWidths.created_at || 200}px`, minWidth: `${colWidths.created_at || 200}px` }}
-                    className="p-3 border-r border-border/40 relative group/th"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Clock className="size-3 text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">created_at</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">timestamptz</span>
-                    </div>
-                    <div
-                      onMouseDown={(e) => handleColumnResize(e, "created_at")}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
-                      title="Drag to resize column"
-                    />
-                  </th>
-                )}
-                {visibleColumns.last_seen_at && (
-                  <th
-                    style={{ width: `${colWidths.last_seen_at || 200}px`, minWidth: `${colWidths.last_seen_at || 200}px` }}
-                    className="p-3 relative group/th"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Clock className="size-3 text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">last_seen_at</span>
-                      <span className="text-[11px] text-muted-foreground/60 lowercase font-normal shrink-0">timestamptz</span>
-                    </div>
-                    <div
-                      onMouseDown={(e) => handleColumnResize(e, "last_seen_at")}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 active:bg-primary z-20 opacity-0 group-hover/th:opacity-100 transition-opacity"
-                      title="Drag to resize column"
-                    />
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border text-xs sm:text-sm">
-              {filteredDevices.length === 0 ? (
-                <tr>
-                  <td colSpan={activeColumnsCount} className="p-8 text-center text-muted-foreground font-mono">
-                    No devices registered matching filters
-                  </td>
-                </tr>
-              ) : (
-                filteredDevices.map((dev) => {
-                  const createdStr = formatDateString(dev.created_at, selectedTimezone)
-                  const lastSeenStr = formatDateString(dev.last_seen_at, selectedTimezone)
-
-                  return (
-                    <tr
-                      key={dev.device_id}
-                      onClick={() => {
-                        setSelectedDevice(dev)
-                      }}
-                      className={`transition-colors border-b border-border/40 hover:bg-muted/10 cursor-pointer ${
-                        selectedDevice?.device_id === dev.device_id ? "bg-muted/20" : ""
-                      }`}
+        {/* Devices Data Table */}
+        <div className="border border-border bg-card rounded-lg overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto w-full min-w-0 custom-scrollbar">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-[11px] font-bold text-muted-foreground uppercase select-none">
+                  {visibleColumns.device_id && (
+                    <th
+                      style={{ width: `${colWidths.device_id || 180}px`, minWidth: `${colWidths.device_id || 180}px` }}
+                      className="py-2.5 px-3 border-r border-border/40 relative group/th"
                     >
-                      {visibleColumns.device_id && (
-                        <td
-                          style={{ maxWidth: `${colWidths.device_id || 180}px` }}
-                          className="p-3 font-semibold text-foreground border-r border-border/40 font-mono"
-                          title={dev.device_id}
-                        >
-                          <div className="flex items-center justify-between gap-2 group/cell min-w-0">
-                            <span className="truncate">{dev.device_id}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleCopyText(dev.device_id)
-                              }}
-                              className="opacity-0 group-hover/cell:opacity-100 p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all cursor-pointer shrink-0"
-                              title="Copy Device ID"
-                            >
-                              {copiedText === dev.device_id ? (
-                                <Check className="size-3 text-primary" />
-                              ) : (
-                                <Copy className="size-3" />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                      {visibleColumns.label && (
-                        <td
-                          style={{ maxWidth: `${colWidths.label || 200}px` }}
-                          className="p-3 text-muted-foreground border-r border-border/40 truncate"
-                          title={dev.label || "null"}
-                        >
-                          {dev.label ? (
-                            <span className="text-foreground truncate block">{dev.label}</span>
-                          ) : (
-                            <span className="italic text-xs text-muted-foreground/50">null</span>
-                          )}
-                        </td>
-                      )}
-                      {visibleColumns.is_active && (
-                        <td
-                          style={{ maxWidth: `${colWidths.is_active || 130}px` }}
-                          className="p-3 border-r border-border/40"
-                        >
-                          <Button
-                            onClick={(e) => handleToggleActive(e, dev.device_id, dev.is_active)}
-                            variant="outline"
-                            size="sm"
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border cursor-pointer select-none transition-all active:scale-95 h-auto ${
-                              dev.is_active
-                                ? "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
-                                : "bg-muted hover:bg-muted/80 text-muted-foreground border-border"
-                            }`}
-                            title={`Click to toggle status (Currently: ${dev.is_active ? "Active" : "Inactive"})`}
+                      <span>Device ID</span>
+                      <div
+                        onMouseDown={(e) => handleColumnResize(e, "device_id")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                        title="Drag to resize column"
+                      />
+                    </th>
+                  )}
+                  {visibleColumns.label && (
+                    <th
+                      style={{ width: `${colWidths.label || 200}px`, minWidth: `${colWidths.label || 200}px` }}
+                      className="py-2.5 px-3 border-r border-border/40 relative group/th"
+                    >
+                      <span>Label</span>
+                      <div
+                        onMouseDown={(e) => handleColumnResize(e, "label")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                        title="Drag to resize column"
+                      />
+                    </th>
+                  )}
+                  {visibleColumns.is_active && (
+                    <th
+                      style={{ width: `${colWidths.is_active || 120}px`, minWidth: `${colWidths.is_active || 120}px` }}
+                      className="py-2.5 px-3 border-r border-border/40 relative group/th"
+                    >
+                      <span>Status</span>
+                      <div
+                        onMouseDown={(e) => handleColumnResize(e, "is_active")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                        title="Drag to resize column"
+                      />
+                    </th>
+                  )}
+                  {visibleColumns.created_at && (
+                    <th
+                      style={{ width: `${colWidths.created_at || 180}px`, minWidth: `${colWidths.created_at || 180}px` }}
+                      className="py-2.5 px-3 border-r border-border/40 relative group/th"
+                    >
+                      <span>Created At</span>
+                      <div
+                        onMouseDown={(e) => handleColumnResize(e, "created_at")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                        title="Drag to resize column"
+                      />
+                    </th>
+                  )}
+                  {visibleColumns.last_seen_at && (
+                    <th
+                      style={{ width: `${colWidths.last_seen_at || 180}px`, minWidth: `${colWidths.last_seen_at || 180}px` }}
+                      className="py-2.5 px-3 border-r border-border/40 relative group/th"
+                    >
+                      <span>Last Seen</span>
+                      <div
+                        onMouseDown={(e) => handleColumnResize(e, "last_seen_at")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover/th:opacity-100 transition-opacity"
+                        title="Drag to resize column"
+                      />
+                    </th>
+                  )}
+                  <th className="py-2.5 px-3 text-right w-20 font-bold uppercase select-none">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-xs">
+                {filteredDevices.length === 0 ? (
+                  <tr>
+                    <td colSpan={activeColumnsCount + 1} className="p-8 text-center text-muted-foreground font-mono">
+                      No devices registered matching current filters
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDevices.map((dev) => {
+                    const createdStr = formatDateString(dev.created_at, selectedTimezone)
+                    const lastSeenStr = formatDateString(dev.last_seen_at, selectedTimezone)
+
+                    return (
+                      <tr
+                        key={dev.device_id}
+                        onClick={() => setSelectedDevice(dev)}
+                        className={cn(
+                          "transition-colors hover:bg-muted/30 cursor-pointer",
+                          selectedDevice?.device_id === dev.device_id && "bg-muted/40"
+                        )}
+                      >
+                        {visibleColumns.device_id && (
+                          <td
+                            style={{ maxWidth: `${colWidths.device_id || 180}px` }}
+                            className="py-2.5 px-3 font-semibold text-foreground border-r border-border/40 font-mono"
+                            title={dev.device_id}
                           >
-                            <span className={`size-1.5 rounded-full ${dev.is_active ? "bg-primary" : "bg-muted-foreground"}`} />
-                            {dev.is_active ? "Active" : "Inactive"}
-                          </Button>
+                            <div className="flex items-center justify-between gap-2 group/cell min-w-0">
+                              <span className="truncate">{dev.device_id}</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCopyText(dev.device_id)
+                                }}
+                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-all cursor-pointer shrink-0"
+                                title="Copy Device ID"
+                              >
+                                {copiedText === dev.device_id ? (
+                                  <Check className="size-3 text-primary" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                        {visibleColumns.label && (
+                          <td
+                            style={{ maxWidth: `${colWidths.label || 200}px` }}
+                            className="py-2.5 px-3 text-muted-foreground border-r border-border/40 truncate"
+                            title={dev.label || "null"}
+                          >
+                            {dev.label ? (
+                              <span className="text-foreground font-medium truncate block">{dev.label}</span>
+                            ) : (
+                              <span className="italic text-xs text-muted-foreground/50">null</span>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumns.is_active && (
+                          <td
+                            style={{ maxWidth: `${colWidths.is_active || 120}px` }}
+                            className="py-2.5 px-3 border-r border-border/40"
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleActive(e, dev.device_id, dev.is_active)}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer select-none transition-all active:scale-95",
+                                dev.is_active
+                                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                                  : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                              )}
+                              title={`Click to toggle status (Currently: ${dev.is_active ? "Active" : "Inactive"})`}
+                            >
+                              <span className={cn("size-1.5 rounded-full", dev.is_active ? "bg-emerald-400" : "bg-muted-foreground")} />
+                              <span>{dev.is_active ? "Active" : "Inactive"}</span>
+                            </button>
+                          </td>
+                        )}
+                        {visibleColumns.created_at && (
+                          <td
+                            style={{ maxWidth: `${colWidths.created_at || 180}px` }}
+                            className="py-2.5 px-3 text-muted-foreground font-mono border-r border-border/40 truncate"
+                            title={createdStr}
+                          >
+                            {createdStr}
+                          </td>
+                        )}
+                        {visibleColumns.last_seen_at && (
+                          <td
+                            style={{ maxWidth: `${colWidths.last_seen_at || 180}px` }}
+                            className="py-2.5 px-3 text-muted-foreground font-mono border-r border-border/40 truncate"
+                            title={lastSeenStr}
+                          >
+                            {lastSeenStr}
+                          </td>
+                        )}
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedDevice(dev)
+                            }}
+                            className="px-2 py-1 rounded text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                          >
+                            Details
+                          </button>
                         </td>
-                      )}
-                      {visibleColumns.created_at && (
-                        <td
-                          style={{ maxWidth: `${colWidths.created_at || 200}px` }}
-                          className="p-3 text-muted-foreground font-mono border-r border-border/40 truncate"
-                          title={createdStr}
-                        >
-                          {createdStr}
-                        </td>
-                      )}
-                      {visibleColumns.last_seen_at && (
-                        <td
-                          style={{ maxWidth: `${colWidths.last_seen_at || 200}px` }}
-                          className="p-3 text-muted-foreground font-mono truncate"
-                          title={lastSeenStr}
-                        >
-                          {lastSeenStr}
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Footer */}
+          <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground select-none">
+            <span>
+              Showing {filteredDevices.length} of {devices.length} total device{devices.length === 1 ? "" : "s"}
+            </span>
+            <span className="font-mono text-[11px] text-foreground font-medium">
+              {devices.filter((d) => d.is_active).length} Active
+            </span>
+          </div>
         </div>
       </div>
 

@@ -280,82 +280,91 @@ export const DEFAULT_ROUTER_EVENT_TYPES: RouterEventTypeMeta[] = [
     type: 5,
     name: "SESSION_END",
     description: "Platform streaming session ended summary",
-    template: "[{session_summary.platform}] duration: {session_summary.duration_sec}s • data: {traffic_metrics.mb_total_binary} MB",
+    template: "[{session.platform}] duration: {session.duration_sec}s • end: {session.end_reason}",
     structure: {
-      session_id: "11111111-2222-4333-8444-555555555555",
-      device_details: {
-        event: "session_end",
-        mac: "AA:BB:CC:DD:EE:FF",
-        hostname: "Galaxy-S21",
-        ip_v4: "192.168.8.100",
-        ip_v6: "fe80::1",
-        ip: "192.168.8.100"
-      },
-      session_summary: {
-        platform: "youtube.com",
-        start_ts: "2026-09-24T10:00:00.000Z",
-        end_ts: "2026-09-24T10:30:00.000Z",
-        duration_sec: 1800,
-        total_domains: 5,
-        total_queries: 42,
-        unique_domains: ["youtube.com", "googlevideo.com", "ytimg.com"]
-      },
-      traffic_metrics: {
-        window_sec: 1800,
+      session: {
+        session_id: "16ef6410-411f-4f54-8689-304de901640b",
+        platform: "youtube",
+        platform_canonical: "youtube",
+        category: "OTT",
+        service_category: "UGC / AVOD",
+        duration_sec: 138,
+        end_reason: "timeout",
         bytes_total: 52428800,
         bytes_down: 50000000,
         bytes_up: 2428800,
-        packets_total: 40000,
-        packets_down: 35000,
-        packets_up: 5000,
-        bitrate_bps: 233016,
-        bitrate_mbps: 0.23,
-        mb_total_binary: 50.0,
-        avg_packet_size_bytes: 1310,
-        flow_count: 12,
-        flow_source: "conntrack",
-        attribution_mode: "by_ip",
-        reset_reason: "session_end"
+        device_ip: "192.168.6.130",
+        device_mac: "C2:2F:45:91:1F:5A",
+        domain_hit_count: 2,
+        session_start_ts: 1793773762,
+        session_end_ts: 1793773900
       }
     },
     sample: {
-      session_id: "11111111-2222-4333-8444-555555555555",
-      device_details: {
-        event: "session_end",
-        mac: "AA:BB:CC:DD:EE:FF",
-        hostname: "Galaxy-S21",
-        ip_v4: "192.168.8.100",
-        ip_v6: "fe80::1",
-        ip: "192.168.8.100"
-      },
-      session_summary: {
-        platform: "youtube.com",
-        start_ts: "2026-09-24T10:00:00.000Z",
-        end_ts: "2026-09-24T10:30:00.000Z",
-        duration_sec: 1800,
-        total_domains: 5,
-        total_queries: 42,
-        unique_domains: ["youtube.com", "googlevideo.com", "ytimg.com"]
-      },
-      traffic_metrics: {
-        window_sec: 1800,
+      session: {
+        session_id: "16ef6410-411f-4f54-8689-304de901640b",
+        platform: "youtube",
+        platform_canonical: "youtube",
+        category: "OTT",
+        service_category: "UGC / AVOD",
+        duration_sec: 138,
+        end_reason: "timeout",
         bytes_total: 52428800,
         bytes_down: 50000000,
         bytes_up: 2428800,
-        packets_total: 40000,
-        packets_down: 35000,
-        packets_up: 5000,
-        bitrate_bps: 233016,
-        bitrate_mbps: 0.23,
-        mb_total_binary: 50.0,
-        avg_packet_size_bytes: 1310,
-        flow_count: 12,
-        flow_source: "conntrack",
-        attribution_mode: "by_ip",
-        reset_reason: "session_end"
+        device_ip: "192.168.6.130",
+        device_mac: "C2:2F:45:91:1F:5A",
+        domain_hit_count: 2,
+        session_start_ts: 1793773762,
+        session_end_ts: 1793773900
       }
     },
     field_rules: [
+      {
+        id: "rule-type5-ott",
+        field: "session.category",
+        operator: "equals",
+        value: "OTT",
+        display_text: "OTT Session",
+        badge_color: "info",
+        enabled: true
+      },
+      {
+        id: "rule-type5-timeout",
+        field: "session.end_reason",
+        operator: "equals",
+        value: "timeout",
+        display_text: "Timeout",
+        badge_color: "warning",
+        enabled: true
+      },
+      {
+        id: "rule-type5-disconnect",
+        field: "session.end_reason",
+        operator: "equals",
+        value: "disconnect",
+        display_text: "Disconnect",
+        badge_color: "destructive",
+        enabled: true
+      },
+      {
+        id: "rule-type5-normal",
+        field: "session.end_reason",
+        operator: "equals",
+        value: "normal",
+        display_text: "Completed",
+        badge_color: "success",
+        enabled: true
+      },
+      {
+        id: "rule-type5-youtube",
+        field: "session.platform",
+        operator: "equals",
+        value: "youtube",
+        display_text: "YouTube",
+        badge_color: "destructive",
+        enabled: true
+      },
       {
         id: "rule-type5-ended",
         field: "device_details.event",
@@ -762,11 +771,19 @@ export function formatRouterDetails(
   }
 
   if (typeId === 5) {
-    const summary = details.session_summary || {}
+    const summary = details.session || details.session_summary || {}
     const traf = details.traffic_metrics || summary.traffic_metrics || {}
-    const pName = summary.platform || "Session"
-    const mb = traf.mb_total_binary !== undefined ? ` • ${traf.mb_total_binary} MB` : ""
-    return `[Session End] ${pName} • duration: ${summary.duration_sec || 0}s${mb}`
+    const pName = summary.platform || summary.platform_canonical || summary.category || "Session"
+    const dur = summary.duration_sec !== undefined ? ` • duration: ${summary.duration_sec}s` : ""
+    const bytes = summary.bytes_total || (summary.bytes_down ? summary.bytes_down + summary.bytes_up : 0)
+    let mb = ""
+    if (bytes) {
+      mb = ` • ${(bytes / (1024 * 1024)).toFixed(2)} MB`
+    } else if (traf.mb_total_binary !== undefined) {
+      mb = ` • ${traf.mb_total_binary} MB`
+    }
+    const reason = summary.end_reason ? ` • reason: ${summary.end_reason}` : ""
+    return `[${pName}]${dur}${mb}${reason}`
   }
 
   if (typeId === 6) {

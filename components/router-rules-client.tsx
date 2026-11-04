@@ -41,8 +41,7 @@ import {
   RouterFieldRule,
   RouterEventTypeMeta,
 } from "@/lib/router-event-defaults"
-
-const LOCAL_STORAGE_RULES_KEY = "indirex_router_rules_meta"
+import { renderEventSummary } from "@/lib/template-formatter"
 
 export function RouterRulesClient() {
   const supabase = createClient()
@@ -67,37 +66,46 @@ export function RouterRulesClient() {
   const [copiedText, setCopiedText] = React.useState<string | null>(null)
 
   const loadRules = React.useCallback(async () => {
-    let savedLocal: Record<number, { template?: string; field_rules?: RouterFieldRule[] }> = {}
     try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_RULES_KEY)
-      if (stored) savedLocal = JSON.parse(stored)
+      const res = await fetch("/api/router-rules", { cache: "no-store" })
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.eventTypes)) {
+          setEventTypes(json.eventTypes)
+          const rMap: Record<number, RouterFieldRule[]> = {}
+          json.eventTypes.forEach((t: RouterEventTypeMeta) => {
+            rMap[t.type] = t.field_rules || []
+          })
+          setFieldRulesMap(rMap)
+          return
+        }
+      }
+    } catch (apiErr) {
+      console.warn("Failed to load router rules from API, falling back to direct Supabase query:", apiErr)
+    }
+
+    try {
+      const { data: dbTypes } = await supabase.from("router_event_types").select("*")
+      const dbMap = new Map(dbTypes?.map((t: any) => [t.type, t]) || [])
+      const rulesStateMap: Record<number, RouterFieldRule[]> = {}
+
+      const updatedTypes = DEFAULT_ROUTER_EVENT_TYPES.map(def => {
+        const dbItem = dbMap.get(def.type)
+        rulesStateMap[def.type] = def.field_rules
+        return {
+          ...def,
+          name: dbItem?.name || def.name,
+          description: dbItem?.description || def.description,
+          template: dbItem?.template || def.template,
+          field_rules: def.field_rules,
+        }
+      })
+
+      setEventTypes(updatedTypes)
+      setFieldRulesMap(rulesStateMap)
     } catch (e) {
       console.error(e)
     }
-
-    const { data: dbTypes } = await supabase.from("router_event_types").select("*")
-    const dbMap = new Map(dbTypes?.map((t: any) => [t.type, t]) || [])
-
-    const rulesStateMap: Record<number, RouterFieldRule[]> = {}
-
-    const updatedTypes = DEFAULT_ROUTER_EVENT_TYPES.map(def => {
-      const localMeta = savedLocal[def.type]
-      const dbItem = dbMap.get(def.type)
-
-      const finalRules = localMeta?.field_rules !== undefined ? localMeta.field_rules : def.field_rules
-      rulesStateMap[def.type] = finalRules
-
-      return {
-        ...def,
-        name: dbItem?.name || def.name,
-        description: dbItem?.description || def.description,
-        template: localMeta?.template !== undefined ? localMeta.template : def.template,
-        field_rules: finalRules,
-      }
-    })
-
-    setEventTypes(updatedTypes)
-    setFieldRulesMap(rulesStateMap)
   }, [supabase])
 
   React.useEffect(() => {
@@ -136,21 +144,26 @@ export function RouterRulesClient() {
       const finalTemplate = newTemplate !== undefined ? newTemplate : (targetType?.template || "")
       const finalRules = updatedRules !== undefined ? updatedRules : (fieldRulesMap[typeId] || [])
 
-      const stored = localStorage.getItem(LOCAL_STORAGE_RULES_KEY)
-      const parsed = stored ? JSON.parse(stored) : {}
-      parsed[typeId] = {
-        template: finalTemplate.trim(),
-        field_rules: finalRules,
-      }
-      localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(parsed))
-
+      // Optimistic state update
       setEventTypes(prev =>
         prev.map(t => (t.type === typeId ? { ...t, template: finalTemplate.trim(), field_rules: finalRules } : t))
       )
       setFieldRulesMap(prev => ({ ...prev, [typeId]: finalRules }))
+
+      // Persist to Supabase DB via API route
+      await fetch("/api/router-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeId,
+          template: finalTemplate.trim(),
+          fieldRules: finalRules,
+        }),
+      })
+
       setEditingType(null)
     } catch (e) {
-      console.error(e)
+      console.error("Failed to save router rules:", e)
     } finally {
       setIsUpdating(false)
     }
@@ -193,12 +206,15 @@ export function RouterRulesClient() {
 
   const livePreviewSummary = React.useMemo(() => {
     if (!activeTypeMeta) return ""
-    return formatRouterDetails(
-      activeTypeMeta.sample,
-      activeTypeMeta.type,
-      activeTypeMeta.type === 4 ? "01" : null,
-      activeTypeMeta.template,
-      activeRules
+    return (
+      renderEventSummary(activeTypeMeta.sample, activeTypeMeta.template, activeRules) ||
+      formatRouterDetails(
+        activeTypeMeta.sample,
+        activeTypeMeta.type,
+        activeTypeMeta.type === 4 ? "01" : null,
+        activeTypeMeta.template,
+        activeRules
+      )
     )
   }, [activeTypeMeta, activeRules])
 

@@ -63,6 +63,7 @@ import {
   getNestedProp,
   RouterEventTypeMeta,
 } from "@/lib/router-event-defaults"
+import { renderEventSummary } from "@/lib/template-formatter"
 
 export interface RouterEventLog {
   id: string
@@ -95,6 +96,17 @@ const formatTimeToHHMM = (date?: Date): string => {
   const h = String(date.getHours()).padStart(2, "0")
   const m = String(date.getMinutes()).padStart(2, "0")
   return `${h}:${m}`
+}
+
+const parseTimestampToUnix = (tsVal: any): number => {
+  if (typeof tsVal === "number") {
+    return tsVal < 1e11 ? tsVal : Math.floor(tsVal / 1000)
+  }
+  if (!tsVal) return 0
+  let str = String(tsVal).trim()
+  if (str.includes(" ") && !str.includes("T")) str = str.replace(" ", "T")
+  const parsedMs = new Date(str).getTime()
+  return isNaN(parsedMs) ? 0 : Math.floor(parsedMs / 1000)
 }
 
 export function RouterEventsClient() {
@@ -271,8 +283,26 @@ export function RouterEventsClient() {
               ...def,
               name: dbItem?.name || def.name,
               description: dbItem?.description || def.description,
+              template: dbItem?.template || def.template,
+              field_rules: dbItem?.field_rules && dbItem.field_rules.length > 0 ? dbItem.field_rules : def.field_rules,
             }
           })
+
+          json.eventTypes.forEach((t: any) => {
+            if (!DEFAULT_ROUTER_EVENT_TYPES.some(def => def.type === t.type)) {
+              merged.push({
+                type: t.type,
+                name: t.name || `TYPE_${t.type}`,
+                description: t.description || "",
+                template: t.template || "[{details}]",
+                structure: t.structure || {},
+                sample: t.sample || {},
+                field_rules: t.field_rules || [],
+              })
+            }
+          })
+
+          merged.sort((a, b) => a.type - b.type)
           setEventTypes(merged)
         }
         if (json.events && Array.isArray(json.events)) {
@@ -475,17 +505,6 @@ export function RouterEventsClient() {
 
   const getCleanTimezoneName = (tz: string) => mapLabelToIana(tz)
 
-  const parseTimestampToUnix = (tsVal: any): number => {
-    if (typeof tsVal === "number") {
-      return tsVal < 1e11 ? tsVal : Math.floor(tsVal / 1000)
-    }
-    if (!tsVal) return Math.floor(Date.now() / 1000)
-    let str = String(tsVal).trim()
-    if (str.includes(" ") && !str.includes("T")) str = str.replace(" ", "T")
-    const parsedMs = new Date(str).getTime()
-    return isNaN(parsedMs) ? Math.floor(Date.now() / 1000) : Math.floor(parsedMs / 1000)
-  }
-
   const handleCopyText = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopiedText(text)
@@ -545,7 +564,8 @@ export function RouterEventsClient() {
 
   const renderDetailsSummaryCell = (evt: RouterEventLog) => {
     const matchedType = eventTypes.find(t => t.type === evt.type)
-    const summaryText = formatRouterDetails(evt.details, evt.type, evt.sub_device_id, matchedType?.template, matchedType?.field_rules)
+    const dynamicSummary = renderEventSummary(evt.details, matchedType?.template, matchedType?.field_rules)
+    const summaryText = dynamicSummary || formatRouterDetails(evt.details, evt.type, evt.sub_device_id, matchedType?.template, matchedType?.field_rules)
 
     // Check platform icon if available
     let platformName: string | null = null

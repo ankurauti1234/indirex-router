@@ -70,12 +70,14 @@ export function RouterEventTypesClient() {
   const [newId, setNewId] = React.useState("")
   const [newName, setNewName] = React.useState("")
   const [newDesc, setNewDesc] = React.useState("")
+  const [newTemplate, setNewTemplate] = React.useState("")
   const [addError, setAddError] = React.useState("")
 
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [editId, setEditId] = React.useState<number | null>(null)
   const [editName, setEditName] = React.useState("")
   const [editDesc, setEditDesc] = React.useState("")
+  const [editTemplate, setEditTemplate] = React.useState("")
   const [editError, setEditError] = React.useState("")
 
   const [visibleColumns, setVisibleColumns] = React.useState({
@@ -144,6 +146,9 @@ export function RouterEventTypesClient() {
               ...def,
               name: dbItem?.name || def.name,
               description: dbItem?.description || def.description,
+              template: dbItem?.template || def.template,
+              structure: dbItem?.structure || def.structure,
+              sample: dbItem?.sample || def.sample,
             }
           })
 
@@ -153,9 +158,9 @@ export function RouterEventTypesClient() {
                 type: d.type,
                 name: d.name || `TYPE_${d.type}`,
                 description: d.description || "Custom router event type",
-                template: "[{details}]",
-                structure: {},
-                sample: {},
+                template: d.template || "[{details}]",
+                structure: d.structure || {},
+                sample: d.sample || {},
                 field_rules: [],
               })
             }
@@ -244,14 +249,20 @@ export function RouterEventTypesClient() {
     }
 
     try {
-      const { error } = await supabase.from("router_event_types").upsert({
-        type: typeNum,
-        name: newName.trim().toUpperCase(),
-        description: newDesc.trim(),
+      const res = await fetch("/api/router-event-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: typeNum,
+          name: newName.trim().toUpperCase(),
+          description: newDesc.trim(),
+          template: newTemplate.trim() || undefined,
+        }),
       })
 
-      if (error) {
-        setAddError(error.message)
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setAddError(errJson.error || "Failed to create event type")
         return
       }
 
@@ -260,6 +271,7 @@ export function RouterEventTypesClient() {
       setNewId("")
       setNewName("")
       setNewDesc("")
+      setNewTemplate("")
     } catch (e: any) {
       setAddError(e.message || "Failed to create event type")
     }
@@ -270,14 +282,20 @@ export function RouterEventTypesClient() {
     if (editId === null) return
 
     try {
-      const { error } = await supabase.from("router_event_types").upsert({
-        type: editId,
-        name: editName.trim().toUpperCase(),
-        description: editDesc.trim(),
+      const res = await fetch("/api/router-event-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editId,
+          name: editName.trim().toUpperCase(),
+          description: editDesc.trim(),
+          template: editTemplate.trim() || undefined,
+        }),
       })
 
-      if (error) {
-        setEditError(error.message)
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setEditError(errJson.error || "Failed to update event type")
         return
       }
 
@@ -292,6 +310,7 @@ export function RouterEventTypesClient() {
     setEditId(t.type)
     setEditName(t.name)
     setEditDesc(t.description)
+    setEditTemplate(t.template || "")
     setIsEditDialogOpen(true)
   }
 
@@ -585,6 +604,14 @@ export function RouterEventTypesClient() {
                 onChange={(e) => setNewDesc(e.target.value)}
               />
             </div>
+            <div>
+              <label className="font-semibold block mb-1">Display Template (Optional)</label>
+              <Input
+                placeholder="e.g. [{device_details.iface}] connected: {device_details.hostname}"
+                value={newTemplate}
+                onChange={(e) => setNewTemplate(e.target.value)}
+              />
+            </div>
           </div>
 
           <DialogFooter>
@@ -626,6 +653,14 @@ export function RouterEventTypesClient() {
               <Input
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Display Template</label>
+              <Input
+                placeholder="e.g. [{device_details.iface}] connected: {device_details.hostname}"
+                value={editTemplate}
+                onChange={(e) => setEditTemplate(e.target.value)}
               />
             </div>
           </div>
