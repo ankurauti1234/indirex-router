@@ -139,6 +139,7 @@ export function UniversalEventsClient({
 
   const { selectedTimezone } = useTimezoneStore()
   const [events, setEvents] = React.useState<TelemetryEventLog[]>([])
+  const [isLoadingEvents, setIsLoadingEvents] = React.useState<boolean>(true)
   const [eventTypes, setEventTypes] = React.useState<TelemetryEventTypeMeta[]>([])
   const [distinctDevices, setDistinctDevices] = React.useState<string[]>([])
   const [selectedEvent, setSelectedEvent] = React.useState<TelemetryEventLog | null>(null)
@@ -224,6 +225,7 @@ export function UniversalEventsClient({
 
   // Load telemetry data from respective API endpoint
   const fetchTelemetryData = React.useCallback(async () => {
+    setIsLoadingEvents(true)
     try {
       const params = new URLSearchParams()
       if (appliedTypeFilter !== "ALL") params.set("type", appliedTypeFilter)
@@ -282,6 +284,8 @@ export function UniversalEventsClient({
       }
     } catch (err) {
       console.warn("Failed fetching events from API route:", err)
+    } finally {
+      setIsLoadingEvents(false)
     }
   }, [isRouter, isWearable, appliedTypeFilter, appliedDeviceFilter, appliedSubDeviceFilter, appliedStartDateFilter, appliedEndDateFilter])
 
@@ -990,6 +994,15 @@ export function UniversalEventsClient({
                       </tr>
                     )
                   })
+                ) : isLoadingEvents ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-xs text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2.5">
+                        <RefreshCw className="size-5 animate-spin text-primary" />
+                        <span className="font-medium">Loading {isWearable ? "Wearable" : isRouter ? "Router" : "SDK"} Telemetry Events...</span>
+                      </div>
+                    </td>
+                  </tr>
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-xs text-muted-foreground">

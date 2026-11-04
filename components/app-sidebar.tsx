@@ -41,10 +41,17 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const isCollapsed = state === "collapsed"
   const { mode } = useTelemetryModeStore()
   const isRouter = mode === "router"
+  const isWearable = mode === "wearable"
+
+  const telemetryLabel = isWearable
+    ? "WEARABLE TELEMETRY"
+    : isRouter
+    ? "ROUTER TELEMETRY"
+    : "SDK TELEMETRY"
 
   const sidebarGroups = [
     {
-      label: isRouter ? "ROUTER TELEMETRY" : "SDK TELEMETRY",
+      label: telemetryLabel,
       items: [
         { title: "Dashboard", icon: Home, url: "/dashboard" },
         {

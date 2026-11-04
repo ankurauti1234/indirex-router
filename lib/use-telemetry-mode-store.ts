@@ -4,13 +4,15 @@ export type TelemetryMode = "sdk" | "router" | "wearable"
 
 interface TelemetryModeState {
   mode: TelemetryMode
+  isSwitching: boolean
+  targetMode: TelemetryMode | null
   setMode: (mode: TelemetryMode) => void
   toggleMode: () => void
 }
 
 const STORAGE_KEY = "indirex_telemetry_mode"
 
-export const useTelemetryModeStore = create<TelemetryModeState>((set) => {
+export const useTelemetryModeStore = create<TelemetryModeState>((set, get) => {
   // Read initial value from localStorage if available in browser
   const getInitialMode = (): TelemetryMode => {
     if (typeof window !== "undefined") {
@@ -24,33 +26,41 @@ export const useTelemetryModeStore = create<TelemetryModeState>((set) => {
     return "sdk"
   }
 
+  let switchTimer: ReturnType<typeof setTimeout> | null = null
+
   return {
     mode: getInitialMode(),
-    setMode: (mode) => {
+    isSwitching: false,
+    targetMode: null,
+    setMode: (nextMode) => {
+      const current = get().mode
+      if (current === nextMode) return
+
       if (typeof window !== "undefined") {
         try {
-          localStorage.setItem(STORAGE_KEY, mode)
+          localStorage.setItem(STORAGE_KEY, nextMode)
         } catch {
           // ignore
         }
       }
-      set({ mode })
+
+      if (switchTimer) clearTimeout(switchTimer)
+
+      set({
+        mode: nextMode,
+        isSwitching: true,
+        targetMode: nextMode,
+      })
+
+      switchTimer = setTimeout(() => {
+        set({ isSwitching: false, targetMode: null })
+      }, 420)
     },
     toggleMode: () => {
-      set((state) => {
-        const order: TelemetryMode[] = ["sdk", "router", "wearable"]
-        const idx = order.indexOf(state.mode)
-        const next = order[(idx + 1) % order.length]
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.setItem(STORAGE_KEY, next)
-          } catch {
-            // ignore
-          }
-        }
-        return { mode: next }
-      })
+      const order: TelemetryMode[] = ["sdk", "router", "wearable"]
+      const idx = order.indexOf(get().mode)
+      const next = order[(idx + 1) % order.length]
+      get().setMode(next)
     },
   }
 })
-

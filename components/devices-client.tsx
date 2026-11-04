@@ -190,6 +190,31 @@ export function DevicesClient() {
           setDevices(fallbackDevs)
           return
         }
+
+        // Secondary fallback: fetch distinct devices from backend API to bypass client RLS
+        try {
+          const apiRes = await fetch("/api/wearable-events?pageSize=100")
+          if (apiRes.ok) {
+            const json = await apiRes.json()
+            if (json.distinctDevices && json.distinctDevices.length > 0) {
+              const devs = json.distinctDevices.map((dId: string) => {
+                const match = json.events?.find((e: any) => e.device_id === dId)
+                return {
+                  device_id: dId,
+                  secret_hash: "",
+                  is_active: true,
+                  label: "Wearable Device",
+                  created_at: match?.timestamp || new Date().toISOString(),
+                  last_seen_at: match?.timestamp || new Date().toISOString(),
+                }
+              })
+              setDevices(devs)
+              return
+            }
+          }
+        } catch {
+          // fallback to standard flow
+        }
       }
 
       const { data, error } = await supabase

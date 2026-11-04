@@ -254,6 +254,19 @@ export function ReportsClient() {
     }
   }
 
+  // Refs to avoid circular callback dependency loops
+  const eventTypesListRef = React.useRef(eventTypesList)
+  React.useEffect(() => {
+    eventTypesListRef.current = eventTypesList
+  }, [eventTypesList])
+
+  // Debounce search term to prevent rapid API hammering while typing
+  const [debouncedSearch, setDebouncedSearch] = React.useState(searchTerm)
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
   // Direct client fallback for count and preview if API is busy
   const fallbackClientPreview = React.useCallback(async () => {
     try {
@@ -291,7 +304,7 @@ export function ReportsClient() {
       setTotalCount(count ?? 0)
 
       if (sampleData) {
-        const typeMap = new Map<number, string>(eventTypesList.map((t) => [t.type, t.name]))
+        const typeMap = new Map<number, string>(eventTypesListRef.current.map((t) => [t.type, t.name]))
         const flattened = sampleData.map((row) =>
           source === "wearable_events"
             ? flattenWearableEventRow(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
@@ -304,10 +317,24 @@ export function ReportsClient() {
     } catch (e) {
       console.error("Client fallback preview error:", e)
     }
-  }, [source, supabase, selectedTypes, deviceId, subDeviceId, startIso, endIso, eventTypesList, selectedTimezone, formatTimestamps])
+  }, [source, supabase, selectedTypes, deviceId, subDeviceId, startIso, endIso, selectedTimezone, formatTimestamps])
+
+  const fallbackClientPreviewRef = React.useRef(fallbackClientPreview)
+  React.useEffect(() => {
+    fallbackClientPreviewRef.current = fallbackClientPreview
+  }, [fallbackClientPreview])
+
+  const abortControllerRef = React.useRef<AbortController | null>(null)
+  const selectedTypesKey = selectedTypes.join(",")
 
   // Fetch Preview & Metadata from API or Supabase
   const loadPreviewData = React.useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setIsLoadingPreview(true)
     try {
       const params = new URLSearchParams()
@@ -331,32 +358,51 @@ export function ReportsClient() {
       if (endIso) {
         params.set("endDate", endIso)
       }
-      if (searchTerm.trim()) {
-        params.set("search", searchTerm.trim())
+      if (debouncedSearch.trim()) {
+        params.set("search", debouncedSearch.trim())
       }
 
-      const res = await fetch(`/api/reports/export?${params.toString()}`)
+      const res = await fetch(`/api/reports/export?${params.toString()}`, {
+        signal: controller.signal,
+      })
       if (res.ok) {
         const data = await res.json()
         setTotalCount(data.totalCount ?? 0)
         setSampleRows(data.sampleRows || [])
         if (data.eventTypes && Array.isArray(data.eventTypes)) {
-          setEventTypesList(data.eventTypes)
+          setEventTypesList((prev) => {
+            if (
+              prev.length === data.eventTypes.length &&
+              prev.every((p: any, i: number) => p.type === data.eventTypes[i].type && p.name === data.eventTypes[i].name)
+            ) {
+              return prev
+            }
+            return data.eventTypes
+          })
         }
         if (data.distinctDevices && Array.isArray(data.distinctDevices)) {
-          setDistinctDevices(data.distinctDevices)
+          setDistinctDevices((prev) => {
+            if (
+              prev.length === data.distinctDevices.length &&
+              prev.every((d: string, i: number) => d === data.distinctDevices[i])
+            ) {
+              return prev
+            }
+            return data.distinctDevices
+          })
         }
       } else {
         // Fallback query directly via Supabase client
-        await fallbackClientPreview()
+        await fallbackClientPreviewRef.current()
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === "AbortError") return
       console.warn("API route preview error, attempting client fallback:", err)
-      await fallbackClientPreview()
+      await fallbackClientPreviewRef.current()
     } finally {
       setIsLoadingPreview(false)
     }
-  }, [source, selectedTypes, deviceId, subDeviceId, startIso, endIso, searchTerm, selectedTimezone, formatTimestamps, fallbackClientPreview])
+  }, [source, selectedTypesKey, deviceId, subDeviceId, startIso, endIso, debouncedSearch, selectedTimezone, formatTimestamps])
 
   // Load preview whenever filters or source change
   React.useEffect(() => {
