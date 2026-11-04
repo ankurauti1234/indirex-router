@@ -15,20 +15,17 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  Activity,
-  History,
   GitFork,
   SlidersHorizontal,
   Router,
   Home,
-  Terminal,
-  Blocks,
   FileBarChart,
   Database,
   Layers,
   Radio,
   Zap,
 } from "lucide-react"
+import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
 
 export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user?: {
@@ -42,41 +39,50 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const pathname = usePathname()
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
+  const { mode } = useTelemetryModeStore()
+  const isRouter = mode === "router"
 
   const sidebarGroups = [
     {
-      label: "MONITOR & ANALYSIS",
+      label: isRouter ? "ROUTER TELEMETRY" : "SDK TELEMETRY",
       items: [
         { title: "Dashboard", icon: Home, url: "/dashboard" },
-        { title: "Events Explorer", icon: Database, url: "/events" },
-        { title: "Router Events", icon: Radio, url: "/router-events" },
-        { title: "Sessions", icon: Activity, url: "/sessions" },
-        { title: "Activity Timeline", icon: History, url: "/activity" },
+        {
+          title: "Events Explorer",
+          icon: Database,
+          url: "/events",
+        },
         { title: "Reports", icon: FileBarChart, url: "/reports" },
       ],
     },
     {
-      label: "SYSTEM LOGIC",
+      label: "CONFIGURATION",
       items: [
-        { title: "Event Mapping", icon: GitFork, url: "/event-mapping" },
-        { title: "Router Event Types", icon: Zap, url: "/router-event-types" },
-        { title: "Platform Mapping", icon: Layers, url: "/platform-mapping" },
-        { title: "Rules", icon: SlidersHorizontal, url: "/rules" },
-        { title: "Router Rules", icon: SlidersHorizontal, url: "/router-rules" },
+        {
+          title: "Event Mapping",
+          icon: GitFork,
+          url: "/event-mapping",
+        },
+        {
+          title: "Rules Engine",
+          icon: SlidersHorizontal,
+          url: "/rules",
+        },
       ],
     },
     {
       label: "INFRASTRUCTURE",
       items: [
-        { title: "Devices", icon: Router, url: "/devices" },
-        { title: "Households", icon: Home, url: "/households" },
-        { title: "Diagnostics & Logs", icon: Terminal, url: "/logs" },
-      ],
-    },
-    {
-      label: "CONNECTIONS",
-      items: [
-        { title: "Integrations", icon: Blocks, url: "/integrations" },
+        {
+          title: "Platform Mapping",
+          icon: Layers,
+          url: "/platform-mapping",
+        },
+        {
+          title: "Devices",
+          icon: Router,
+          url: "/devices",
+        },
       ],
     },
   ]

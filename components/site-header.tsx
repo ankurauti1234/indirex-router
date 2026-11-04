@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   Search,
-  HelpCircle,
-  Bell,
   LogOut,
   Zap,
+  Globe,
+  ChevronDown,
 } from "lucide-react"
+import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
+import { cn } from "@/lib/utils"
 
 export interface SiteHeaderProps {
   user?: {
@@ -42,6 +44,7 @@ export function SiteHeader({ user }: SiteHeaderProps) {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
   const { selectedTimezone, setSelectedTimezone, getLocalTimezone } = useTimezoneStore()
+  const { mode, setMode } = useTelemetryModeStore()
   const [search, setSearch] = React.useState("")
 
   React.useEffect(() => {
@@ -68,8 +71,8 @@ export function SiteHeader({ user }: SiteHeaderProps) {
     <header className="sticky top-0 z-10 flex h-12 w-full shrink-0 items-center border-b border-border bg-card text-card-foreground px-3 select-none transition-colors">
       <div className="flex w-full items-center justify-between gap-4">
         
-        {/* Left Section: Mobile Trigger, Logo & App Name */}
-        <div className="flex items-center gap-2">
+        {/* Left Section: Mobile Trigger, Logo & App Name, Mode Switcher */}
+        <div className="flex items-center gap-2.5">
           {/* Mobile Sidebar Trigger */}
           <SidebarTrigger className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent" />
 
@@ -78,48 +81,124 @@ export function SiteHeader({ user }: SiteHeaderProps) {
             <div className="flex size-6 items-center justify-center rounded bg-primary text-primary-foreground shrink-0 shadow-2xs font-bold text-xs">
               <Zap className="size-3.5 fill-current" />
             </div>
-            <span className="font-bold text-sm text-foreground tracking-tight">Indirex Router</span>
+            <span className="font-bold text-sm text-foreground tracking-tight hidden md:inline">Indirex</span>
           </Link>
-        </div>
 
-        {/* Center Section: Search Bar */}
-        <div className="flex-1 max-w-xl mx-2 hidden sm:block">
-          <div className="relative flex items-center w-full">
-            <Search className="absolute left-3 size-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-full h-8 pl-9 pr-12 text-xs bg-muted/60 border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-            />
-            <kbd className="pointer-events-none absolute right-2 top-1.5 hidden select-none items-center gap-0.5 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-muted-foreground font-medium sm:flex">
-              <span>Ctrl</span>K
-            </kbd>
+          {/* Telemetry Mode Switcher (Modern Text-Only Segmented Control) */}
+          <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 text-xs font-medium ml-2 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setMode("sdk")}
+              className={cn(
+                "px-3 py-1 rounded-md transition-all text-xs cursor-pointer select-none",
+                mode === "sdk"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground font-medium"
+              )}
+              title="SDK Mode: View application playback events, schemas, and rules"
+            >
+              SDK
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("router")}
+              className={cn(
+                "px-3 py-1 rounded-md transition-all text-xs cursor-pointer select-none",
+                mode === "router"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground font-medium"
+              )}
+              title="Router Mode: View hardware router telemetry, schemas, and rules"
+            >
+              Router
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("wearable")}
+              className={cn(
+                "px-3 py-1 rounded-md transition-all text-xs cursor-pointer select-none",
+                mode === "wearable"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground font-medium"
+              )}
+              title="Wearable Mode: View acoustic watermarking, song match and wearable telemetry"
+            >
+              Wearable
+            </button>
           </div>
         </div>
 
-        {/* Right Section: Notifications, Help, Profile */}
+        {/* Right Section: Timezone Selector & Profile */}
         <div className="flex items-center gap-2 shrink-0">
 
-          {/* Notification Bell with Badge */}
-          <button
-            type="button"
-            className="relative p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title="Notifications"
-          >
-            <Bell className="size-4" />
-            <span className="absolute top-1 right-1 flex size-2 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
-              1
-            </span>
-          </button>
+          {/* Timezone Selector Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={
+              <button
+                type="button"
+                className="flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border/80 bg-background hover:bg-accent text-xs font-medium text-foreground transition-colors cursor-pointer shadow-2xs"
+                title={`Active Timezone: ${selectedTimezone}`}
+              >
+                <Globe className="size-3.5 text-muted-foreground shrink-0" />
+                <span className="max-w-[130px] sm:max-w-[200px] truncate text-[11px] sm:text-xs text-foreground/90 font-mono">
+                  {selectedTimezone}
+                </span>
+                <ChevronDown className="size-3 text-muted-foreground/70 shrink-0" />
+              </button>
+            } />
+            <DropdownMenuContent align="end" className="w-80 max-h-[380px] overflow-y-auto p-1.5 bg-popover rounded-lg shadow-lg ring-1 ring-foreground/10 border border-border">
+              {/* Search box */}
+              <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-border mb-1">
+                <Search className="size-3.5 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search timezone..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Escape") {
+                      e.stopPropagation()
+                    }
+                  }}
+                  className="w-full bg-transparent text-xs text-foreground outline-hidden border-none placeholder:text-muted-foreground"
+                  autoFocus
+                />
+              </div>
 
-          {/* Help Icon */}
-          <button
-            type="button"
-            className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden sm:flex"
-            title="Help"
-          >
-            <HelpCircle className="size-4" />
-          </button>
+              {/* Auto detect option */}
+              {(!search || "auto detect".includes(search.toLowerCase())) && (
+                <DropdownMenuItem
+                  onClick={() => setSelectedTimezone(`Auto (${getLocalTimezone()})`)}
+                  className="cursor-pointer py-1.5 px-2.5 flex items-center justify-between text-xs text-foreground rounded-md focus:bg-accent/50"
+                >
+                  <div className="flex flex-col text-left">
+                    <span className="font-medium">Auto detect</span>
+                    <span className="text-[10px] text-muted-foreground">{getLocalTimezone()}</span>
+                  </div>
+                  {selectedTimezone.startsWith("Auto") && (
+                    <span className="text-xs text-foreground font-semibold">✓</span>
+                  )}
+                </DropdownMenuItem>
+              )}
+
+              {/* Standard options */}
+              {timezones
+                .filter((tz) => tz.label.toLowerCase().includes(search.toLowerCase()))
+                .map((tz) => {
+                  const isActive = selectedTimezone === tz.label
+                  return (
+                    <DropdownMenuItem
+                      key={tz.value}
+                      onClick={() => setSelectedTimezone(tz.label)}
+                      className="cursor-pointer py-1.5 px-2.5 flex items-center justify-between text-xs text-foreground rounded-md focus:bg-accent/50"
+                    >
+                      <span>{tz.label}</span>
+                      {isActive && <span className="text-xs text-foreground font-semibold">✓</span>}
+                    </DropdownMenuItem>
+                  )
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* User Profile Dropdown Menu */}
           <DropdownMenu>
@@ -166,71 +245,6 @@ export function SiteHeader({ user }: SiteHeaderProps) {
                   )
                 })}
               </div>
-
-              <DropdownMenuSeparator />
-
-              {/* Timezone Switcher Submenu */}
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="cursor-pointer py-1.5 px-3 flex items-center justify-between rounded-md w-full text-left focus:bg-accent/50 outline-hidden">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-foreground font-normal">Timezone</span>
-                    <span className="text-[10px] text-muted-foreground mt-0.5">{selectedTimezone}</span>
-                  </div>
-                </DropdownMenuSubTrigger>
-                
-                <DropdownMenuSubContent align="start" className="w-80 max-h-[350px] overflow-y-auto p-1.5 bg-popover rounded-lg shadow-lg ring-1 ring-foreground/10 border border-border">
-                  {/* Search box */}
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-border mb-1">
-                    <Search className="size-3.5 text-muted-foreground shrink-0" />
-                    <input
-                      type="text"
-                      placeholder="Search timezone..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Escape") {
-                          e.stopPropagation()
-                        }
-                      }}
-                      className="w-full bg-transparent text-xs text-foreground outline-hidden border-none placeholder:text-muted-foreground"
-                      autoFocus
-                    />
-                  </div>
-
-                  {/* Auto detect option */}
-                  {(!search || "auto detect".includes(search.toLowerCase())) && (
-                    <DropdownMenuItem
-                      onClick={() => setSelectedTimezone(`Auto (${getLocalTimezone()})`)}
-                      className="cursor-pointer py-1.5 px-2.5 flex items-center justify-between text-xs text-foreground rounded-md focus:bg-accent/50"
-                    >
-                      <div className="flex flex-col text-left">
-                        <span className="font-medium">Auto detect</span>
-                        <span className="text-[10px] text-muted-foreground">{getLocalTimezone()}</span>
-                      </div>
-                      {selectedTimezone.startsWith("Auto") && (
-                        <span className="text-xs text-foreground font-semibold">✓</span>
-                      )}
-                    </DropdownMenuItem>
-                  )}
-
-                  {/* Standard options */}
-                  {timezones
-                    .filter((tz) => tz.label.toLowerCase().includes(search.toLowerCase()))
-                    .map((tz) => {
-                      const isActive = selectedTimezone === tz.label
-                      return (
-                        <DropdownMenuItem
-                          key={tz.value}
-                          onClick={() => setSelectedTimezone(tz.label)}
-                          className="cursor-pointer py-1.5 px-2.5 flex items-center justify-between text-xs text-foreground rounded-md focus:bg-accent/50"
-                        >
-                          <span>{tz.label}</span>
-                          {isActive && <span className="text-xs text-foreground font-semibold">✓</span>}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
 
               <DropdownMenuSeparator />
 

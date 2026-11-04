@@ -55,111 +55,110 @@
 
 :root {
   /* ==========================================================================
-     Atlassian Design System (ADS) Light Theme Palette
+     GitHub Light Theme Palette
      ========================================================================== */
-  --background: #F7F8F9;          /* Atlassian Light Page Background #F7F8F9 */
-  --foreground: #172B4D;          /* Atlassian Primary Dark Text #172B4D */
-  --card: #FFFFFF;                /* Atlassian Surface Background #FFFFFF */
-  --card-foreground: #172B4D;     /* Atlassian Card Text #172B4D */
-  --popover: #FFFFFF;             /* Atlassian Overlay Surface #FFFFFF */
-  --popover-foreground: #172B4D;  /* Atlassian Popover Text #172B4D */
-  --primary: #0C66E4;             /* Atlassian Brand Blue #0C66E4 */
-  --primary-foreground: #FFFFFF;  /* White Text on Primary */
-  --secondary: #F1F2F4;           /* Atlassian Raised Surface #F1F2F4 */
-  --secondary-foreground: #172B4D;
-  --muted: #F1F2F4;               /* Atlassian Muted Container #F1F2F4 */
-  --muted-foreground: #626F86;    /* Atlassian Muted Text #626F86 */
-  --accent: #E9F2FF;              /* Atlassian Subtle Selection #E9F2FF */
-  --accent-foreground: #0C66E4;   /* Atlassian Brand Text #0C66E4 */
-  --destructive: #CA3521;         /* Atlassian Danger Red #CA3521 */
-  --destructive-foreground: #FFFFFF;
-  --border: #DCDFE4;              /* Atlassian Border #DCDFE4 */
-  --input: #DCDFE4;               /* Atlassian Input Border #DCDFE4 */
-  --ring: #0C66E4;                /* Focus Ring #0C66E4 */
+  --background: #ffffff;          /* GitHub canvas default */
+  --foreground: #1f2328;          /* GitHub text default */
+  --card: #ffffff;                /* GitHub card default */
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --primary: #0969da;             /* GitHub brand primary blue */
+  --primary-foreground: #ffffff;
+  --secondary: #f6f8fa;           /* GitHub canvas subtle */
+  --secondary-foreground: #1f2328;
+  --muted: #f6f8fa;               /* GitHub subtle background */
+  --muted-foreground: #656d76;    /* GitHub fg muted */
+  --accent: #f6f8fa;              /* GitHub hover subtle */
+  --accent-foreground: #0969da;
+  --destructive: #cf222e;         /* GitHub danger red */
+  --destructive-foreground: #ffffff;
+  --border: #d0d7de;              /* GitHub border default */
+  --input: #d0d7de;
+  --ring: #0969da;
 
-  /* Atlassian Chart & Category Palette */
-  --chart-1: #0C66E4;
-  --chart-2: #22A06B;
-  --chart-3: #E2B203;
-  --chart-4: #8270DB;
-  --chart-5: #FE6E45;
+  /* GitHub Category & Chart Palette */
+  --chart-1: #0969da;             /* Blue */
+  --chart-2: #1a7f37;             /* Green */
+  --chart-3: #9a6700;             /* Yellow/Amber */
+  --chart-4: #8250df;             /* Purple */
+  --chart-5: #cf222e;             /* Red */
 
-  /* Atlassian Sidebar Navigation Tokens */
-  --sidebar: #F7F8F9;             /* Atlassian Sidebar BG #F7F8F9 */
-  --sidebar-foreground: #44546F;  /* Atlassian Sidebar Text #44546F */
-  --sidebar-primary: #0C66E4;     /* Atlassian Active Blue #0C66E4 */
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #E9F2FF;      /* Atlassian Active Nav Pill #E9F2FF */
-  --sidebar-accent-foreground: #0C66E4; /* Atlassian Active Nav Text #0C66E4 */
-  --sidebar-border: #DCDFE4;      /* Atlassian Border #DCDFE4 */
-  --sidebar-ring: #0C66E4;
+  /* GitHub Sidebar Navigation Tokens */
+  --sidebar: #f6f8fa;             /* GitHub subtle */
+  --sidebar-foreground: #1f2328;
+  --sidebar-primary: #0969da;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeef2;
+  --sidebar-accent-foreground: #0969da;
+  --sidebar-border: #d0d7de;
+  --sidebar-ring: #0969da;
 
-  --radius: 0.25rem;                            /* ADS Standard 4px Radius */
+  --radius: 0.375rem;             /* 6px standard GitHub radius */
 
-  /* ADS 8-pt Depth Elevation Shadows */
-  --shadow-2xs: 0px 1px 1px rgba(9, 30, 66, 0.13), 0px 0px 1px rgba(9, 30, 66, 0.13);
-  --shadow-xs: 0px 1px 2px rgba(9, 30, 66, 0.15);
-  --shadow-sm: 0px 1px 1px rgba(9, 30, 66, 0.25), 0px 0px 1px rgba(9, 30, 66, 0.31);
-  --shadow: 0px 1px 1px rgba(9, 30, 66, 0.25), 0px 0px 1px rgba(9, 30, 66, 0.31);
-  --shadow-md: 0px 3px 5px rgba(9, 30, 66, 0.20);
-  --shadow-lg: 0px 8px 12px rgba(9, 30, 66, 0.15), 0px 0px 1px rgba(9, 30, 66, 0.31);
-  --shadow-xl: 0px 12px 24px rgba(9, 30, 66, 0.20);
-  --shadow-2xl: 0px 16px 32px rgba(9, 30, 66, 0.25);
+  --shadow-2xs: 0 1px 0 rgba(31, 35, 40, 0.04);
+  --shadow-xs: 0 1px 2px rgba(31, 35, 40, 0.08);
+  --shadow-sm: 0 1px 3px rgba(31, 35, 40, 0.12);
+  --shadow: 0 1px 3px rgba(31, 35, 40, 0.12), 0 1px 2px rgba(31, 35, 40, 0.08);
+  --shadow-md: 0 3px 6px rgba(31, 35, 40, 0.12), 0 3px 6px rgba(31, 35, 40, 0.08);
+  --shadow-lg: 0 8px 24px rgba(140, 149, 159, 0.2);
+  --shadow-xl: 0 12px 28px rgba(140, 149, 159, 0.3);
+  --shadow-2xl: 0 16px 32px rgba(140, 149, 159, 0.35);
 
   --spacing: 0.25rem;
 }
 
 .dark {
   /* ==========================================================================
-     Atlassian Confluence Exact Dark Palette
+     GitHub Dark Theme Palette
      ========================================================================== */
-  --background: #1F1F21;          /* Confluence Main Background #1F1F21 */
-  --foreground: #B6C2CF;          /* Confluence Primary Text #B6C2CF */
-  --card: #1F1F21;                /* Confluence Surface Background #1F1F21 */
-  --card-foreground: #B6C2CF;     /* Confluence Card Text #B6C2CF */
-  --popover: #22272B;             /* Confluence Popover Surface #22272B */
-  --popover-foreground: #B6C2CF;  /* Confluence Popover Text #B6C2CF */
-  --primary: #0C66E4;             /* Confluence Brand Blue #0C66E4 */
-  --primary-foreground: #FFFFFF;  /* White Text on Primary */
-  --secondary: #22272B;           /* Confluence Raised Card Surface #22272B */
-  --secondary-foreground: #B6C2CF;
-  --muted: #22272B;               /* Confluence Muted Surface #22272B */
-  --muted-foreground: #9FADBC;    /* Confluence Muted Text #9FADBC */
-  --accent: #1C2B42;              /* Confluence Active Pill Selection #1C2B42 */
-  --accent-foreground: #579DFF;   /* Confluence Active Blue Text #579DFF */
-  --destructive: #FF6651;         /* Confluence Danger Red #FF6651 */
-  --destructive-foreground: #FFFFFF;
-  --border: #2C333A;              /* Confluence Divider Border #2C333A */
-  --input: #38414A;               /* Confluence Input Border #38414A */
-  --ring: #579DFF;                /* Focus Ring #579DFF */
+  --background: #0d1117;          /* GitHub Dark canvas default */
+  --foreground: #e6edf3;          /* GitHub Dark text default */
+  --card: #161b22;                /* GitHub Dark canvas subtle */
+  --card-foreground: #e6edf3;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+  --primary: #2f81f7;             /* GitHub Dark accent blue */
+  --primary-foreground: #ffffff;
+  --secondary: #21262d;           /* GitHub Dark button/card subtle */
+  --secondary-foreground: #e6edf3;
+  --muted: #21262d;               /* GitHub Dark muted */
+  --muted-foreground: #848d97;    /* GitHub Dark fg muted */
+  --accent: #21262d;
+  --accent-foreground: #58a6ff;
+  --destructive: #f85149;         /* GitHub Dark danger red */
+  --destructive-foreground: #ffffff;
+  --border: #30363d;              /* GitHub Dark border default */
+  --input: #30363d;
+  --ring: #58a6ff;
 
-  /* Atlassian Dark Chart Palette */
-  --chart-1: #579DFF;
-  --chart-2: #7EE2B8;
-  --chart-3: #F5CD47;
-  --chart-4: #9F8FEF;
-  --chart-5: #FE8F73;
+  /* GitHub Dark Chart Palette */
+  --chart-1: #2f81f7;
+  --chart-2: #3fb950;
+  --chart-3: #d29922;
+  --chart-4: #a371f7;
+  --chart-5: #f85149;
 
-  /* Atlassian Dark Sidebar Tokens */
-  --sidebar: #1F1F21;             /* Confluence Sidebar BG #1F1F21 */
-  --sidebar-foreground: #B6C2CF;  /* Confluence Nav Text #B6C2CF */
-  --sidebar-primary: #579DFF;     /* Confluence Active Blue #579DFF */
-  --sidebar-primary-foreground: #1F1F21;
-  --sidebar-accent: #1C2B42;      /* Confluence Active Nav Item Pill #1C2B42 */
-  --sidebar-accent-foreground: #579DFF; /* Confluence Active Text #579DFF */
-  --sidebar-border: #2C333A;     /* Confluence Border #2C333A */
-  --sidebar-ring: #579DFF;
+  /* GitHub Dark Sidebar Tokens */
+  --sidebar: #0d1117;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-primary: #2f81f7;
+  --sidebar-primary-foreground: #0d1117;
+  --sidebar-accent: #161b22;
+  --sidebar-accent-foreground: #58a6ff;
+  --sidebar-border: #30363d;
+  --sidebar-ring: #58a6ff;
 
-  --radius: 0.25rem;
+  --radius: 0.375rem;
 
-  --shadow-2xs: 0px 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-xs: 0px 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0px 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0px 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0px 3px 6px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0px 8px 16px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0px 12px 24px rgba(0, 0, 0, 0.6);
-  --shadow-2xl: 0px 16px 32px rgba(0, 0, 0, 0.7);
+  --shadow-2xs: 0 1px 0 rgba(1, 4, 9, 0.3);
+  --shadow-xs: 0 1px 2px rgba(1, 4, 9, 0.3);
+  --shadow-sm: 0 1px 3px rgba(1, 4, 9, 0.4);
+  --shadow: 0 1px 3px rgba(1, 4, 9, 0.4);
+  --shadow-md: 0 3px 6px rgba(1, 4, 9, 0.4);
+  --shadow-lg: 0 8px 24px rgba(1, 4, 9, 0.6);
+  --shadow-xl: 0 12px 28px rgba(1, 4, 9, 0.7);
+  --shadow-2xl: 0 16px 32px rgba(1, 4, 9, 0.8);
 }
 
 @layer base {
