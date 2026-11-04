@@ -3,14 +3,17 @@ import { createAdminClient } from "@/lib/supabase/server"
 import {
   ROUTER_EVENT_COLUMNS,
   PLAYBACK_EVENT_COLUMNS,
+  WEARABLE_EVENT_COLUMNS,
   flattenRouterEvent,
   flattenPlaybackEvent,
+  flattenWearableEventRow,
   generateCsvString,
   generateXlsxBuffer,
   ReportSource,
   ExportFormat,
 } from "@/lib/reports-export-helper"
 import { DEFAULT_ROUTER_EVENT_TYPES } from "@/lib/router-event-defaults"
+import { DEFAULT_WEARABLE_EVENT_TYPES } from "@/lib/wearable-event-defaults"
 
 export async function GET(request: NextRequest) {
   try {
@@ -124,15 +127,17 @@ async function handleExportRequest(params: ExportParams) {
   } = params
 
   const supabase = createAdminClient()
-  const tableName = source === "router_events" ? "router_events" : "playback_events"
-  const typesTableName = source === "router_events" ? "router_event_types" : "event_types"
-  const columnDefs = source === "router_events" ? ROUTER_EVENT_COLUMNS : PLAYBACK_EVENT_COLUMNS
+  const tableName = source === "wearable_events" ? "wearable_events" : source === "router_events" ? "router_events" : "playback_events"
+  const typesTableName = source === "wearable_events" ? "wearable_event_types" : source === "router_events" ? "router_event_types" : "event_types"
+  const columnDefs = source === "wearable_events" ? WEARABLE_EVENT_COLUMNS : source === "router_events" ? ROUTER_EVENT_COLUMNS : PLAYBACK_EVENT_COLUMNS
 
   // 1. Fetch metadata: event types
   let eventTypesList: any[] = []
   const { data: dbTypes } = await supabase.from(typesTableName).select("*").order("type", { ascending: true })
   if (dbTypes && dbTypes.length > 0) {
     eventTypesList = dbTypes
+  } else if (source === "wearable_events") {
+    eventTypesList = DEFAULT_WEARABLE_EVENT_TYPES
   } else if (source === "router_events") {
     eventTypesList = DEFAULT_ROUTER_EVENT_TYPES
   }
@@ -203,7 +208,9 @@ async function handleExportRequest(params: ExportParams) {
 
     // Flatten sample rows
     const flattenedSample = (sampleRows || []).map((row: any) =>
-      source === "router_events"
+      source === "wearable_events"
+        ? flattenWearableEventRow(row, { timezone, formatTimestamps, typeNamesMap })
+        : source === "router_events"
         ? flattenRouterEvent(row, { timezone, formatTimestamps, typeNamesMap })
         : flattenPlaybackEvent(row, { timezone, formatTimestamps, typeNamesMap })
     )
@@ -264,7 +271,9 @@ async function handleExportRequest(params: ExportParams) {
 
   // Flatten rows
   const flattenedRows = fetchedRows.map((row) =>
-    source === "router_events"
+    source === "wearable_events"
+      ? flattenWearableEventRow(row, { timezone, formatTimestamps, typeNamesMap })
+      : source === "router_events"
       ? flattenRouterEvent(row, { timezone, formatTimestamps, typeNamesMap })
       : flattenPlaybackEvent(row, { timezone, formatTimestamps, typeNamesMap })
   )
@@ -282,7 +291,7 @@ async function handleExportRequest(params: ExportParams) {
   }
 
   if (format === "xlsx") {
-    const sheetTitle = source === "router_events" ? "Router Events" : "Playback Events"
+    const sheetTitle = source === "wearable_events" ? "Wearable Events" : source === "router_events" ? "Router Events" : "Playback Events"
     const buffer = generateXlsxBuffer(flattenedRows, columnDefs, sheetTitle, selectedColumns)
 
     return new Response(buffer as any, {

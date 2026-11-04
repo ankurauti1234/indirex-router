@@ -2,7 +2,7 @@ import * as XLSX from "xlsx"
 import { formatTimestamp } from "@/lib/timezones"
 import { formatRouterDetails, DEFAULT_ROUTER_EVENT_TYPES, RouterEventTypeMeta } from "@/lib/router-event-defaults"
 
-export type ReportSource = "router_events" | "playback_events"
+export type ReportSource = "router_events" | "playback_events" | "wearable_events"
 export type ExportFormat = "xlsx" | "csv" | "json"
 export type ColumnPreset = "flattened" | "extended" | "raw" | "custom"
 
@@ -61,6 +61,28 @@ export const PLAYBACK_EVENT_COLUMNS: ExportColumnDef[] = [
   { key: "created_at", label: "Created At (Server)", category: "core", defaultSelected: false },
   { key: "raw_details", label: "Raw Details (JSON)", category: "advanced", defaultSelected: false },
 ]
+
+export const WEARABLE_EVENT_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "Event ID", category: "core", defaultSelected: true },
+  { key: "timestamp", label: "Timestamp", category: "core", defaultSelected: true },
+  { key: "device_id", label: "Wearable Device ID", category: "core", defaultSelected: true },
+  { key: "type", label: "Type Code", category: "core", defaultSelected: true },
+  { key: "type_name", label: "Event Type Name", category: "core", defaultSelected: true },
+  { key: "summary", label: "Event Summary", category: "core", defaultSelected: true },
+  { key: "content_type", label: "Content Type", category: "content", defaultSelected: true },
+  { key: "content", label: "Song / Watermark", category: "content", defaultSelected: true },
+  { key: "wifi_status", label: "WiFi Status", category: "network", defaultSelected: true },
+  { key: "wifi_connected", label: "WiFi Connected", category: "network", defaultSelected: true },
+  { key: "ssid", label: "SSID", category: "network", defaultSelected: true },
+  { key: "received_at", label: "Server Received At", category: "core", defaultSelected: false },
+  { key: "raw_details", label: "Raw Details (JSON)", category: "advanced", defaultSelected: false },
+]
+
+export const WEARABLE_EVENT_TYPE_NAMES: Record<number, string> = {
+  1: "SONG_MATCHED",
+  2: "WATERMARK_LISTENING",
+  3: "WIFI_STATUS",
+}
 
 export const PLAYBACK_EVENT_TYPE_NAMES: Record<number, string> = {
   1: "PLAY_START",
@@ -248,6 +270,62 @@ export function flattenPlaybackEvent(
     member_id: userCtx.member_id || "",
     reason: details.reason || "",
     created_at: createdAtStr,
+    raw_details: JSON.stringify(details),
+  }
+}
+
+export function flattenWearableEventRow(
+  record: any,
+  options: {
+    timezone: string
+    formatTimestamps: boolean
+    typeNamesMap?: Map<number, string>
+    typeNames?: Record<number, string>
+  }
+): Record<string, any> {
+  const details = typeof record.details === "string" ? safeJsonParse(record.details) : (record.details || {})
+  const typeId = typeof record.type === "number" ? record.type : parseInt(record.type || "0", 10)
+  const typeName =
+    options.typeNamesMap?.get(typeId) ||
+    options.typeNames?.[typeId] ||
+    WEARABLE_EVENT_TYPE_NAMES[typeId] ||
+    `TYPE_${typeId}`
+
+  const timestampStr = options.formatTimestamps
+    ? formatTimestamp(record.timestamp, options.timezone || "UTC")
+    : String(record.timestamp || "")
+
+  const receivedAtStr = options.formatTimestamps && record.received_at
+    ? formatTimestamp(record.received_at, options.timezone || "UTC")
+    : String(record.received_at || "")
+
+  let summary = ""
+  if (typeId === 1) {
+    summary = `[Song] ${record.content || "Song Detected"} • Watermark Verified`
+  } else if (typeId === 2) {
+    summary = `[Listening] ${record.content || "Heartbeat"} • Mic Active`
+  } else if (typeId === 3) {
+    const status = record.wifi_status || details.wifi || "ON"
+    const ssid = record.ssid ? ` • SSID: ${record.ssid}` : ""
+    const conn = record.wifi_connected !== undefined ? (record.wifi_connected ? " • Connected" : " • Disconnected") : ""
+    summary = `[WiFi ${status}]${ssid}${conn}`
+  } else {
+    summary = `Wearable Type ${typeId}`
+  }
+
+  return {
+    id: String(record.id || ""),
+    timestamp: timestampStr,
+    device_id: String(record.device_id || ""),
+    type: typeId,
+    type_name: typeName,
+    summary,
+    content_type: record.content_type || details.content_type || "",
+    content: record.content || details.content || "",
+    wifi_status: record.wifi_status || details.wifi_status || details.wifi || "",
+    wifi_connected: record.wifi_connected !== undefined ? record.wifi_connected : (details.connected ?? ""),
+    ssid: record.ssid || details.ssid || "",
+    received_at: receivedAtStr,
     raw_details: JSON.stringify(details),
   }
 }

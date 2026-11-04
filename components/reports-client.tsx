@@ -17,6 +17,7 @@ import {
   Copy,
   Radio,
   Tv,
+  Watch,
   Database,
   Layers,
   Sparkles,
@@ -30,6 +31,7 @@ import {
   Hash,
 } from "lucide-react"
 import { useTimezoneStore } from "@/lib/use-timezone-store"
+import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
 import { mapLabelToIana, formatTimestamp } from "@/lib/timezones"
 import { PageContainer } from "@/components/page-container"
 import { Button } from "@/components/ui/button"
@@ -57,23 +59,41 @@ import {
   ColumnPreset,
   ROUTER_EVENT_COLUMNS,
   PLAYBACK_EVENT_COLUMNS,
+  WEARABLE_EVENT_COLUMNS,
   ExportColumnDef,
   PLAYBACK_EVENT_TYPE_NAMES,
+  WEARABLE_EVENT_TYPE_NAMES,
   generateCsvString,
   generateXlsxBuffer,
   flattenRouterEvent,
   flattenPlaybackEvent,
+  flattenWearableEventRow,
 } from "@/lib/reports-export-helper"
 import { DEFAULT_ROUTER_EVENT_TYPES } from "@/lib/router-event-defaults"
+import { DEFAULT_WEARABLE_EVENT_TYPES } from "@/lib/wearable-event-defaults"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export function ReportsClient() {
   const { selectedTimezone } = useTimezoneStore()
+  const { mode } = useTelemetryModeStore()
   const supabase = React.useMemo(() => createClient(), [])
 
-  // 1. Core Source Selection
-  const [source, setSource] = React.useState<ReportSource>("router_events")
+  // 1. Core Source Selection (synced with active telemetry mode)
+  const [source, setSource] = React.useState<ReportSource>(
+    mode === "wearable" ? "wearable_events" : mode === "router" ? "router_events" : "playback_events"
+  )
 
   // 2. Filters State
   const [selectedTypes, setSelectedTypes] = React.useState<number[]>([]) // empty = ALL
@@ -95,7 +115,11 @@ export function ReportsClient() {
   const [formatTimestamps, setFormatTimestamps] = React.useState<boolean>(true)
 
   // 4. Data states
-  const [eventTypesList, setEventTypesList] = React.useState<any[]>([])
+  const [eventTypesList, setEventTypesList] = React.useState<any[]>(() => {
+    if (mode === "wearable") return DEFAULT_WEARABLE_EVENT_TYPES
+    if (mode === "router") return DEFAULT_ROUTER_EVENT_TYPES
+    return []
+  })
   const [distinctDevices, setDistinctDevices] = React.useState<string[]>([])
   const [totalCount, setTotalCount] = React.useState<number | null>(null)
   const [sampleRows, setSampleRows] = React.useState<any[]>([])
@@ -109,9 +133,32 @@ export function ReportsClient() {
   const [showColumnDialog, setShowColumnDialog] = React.useState<boolean>(false)
   const [typeSearchTerm, setTypeSearchTerm] = React.useState<string>("")
 
+  // Sync mode changes to active source and reset filters
+  React.useEffect(() => {
+    const target: ReportSource =
+      mode === "wearable" ? "wearable_events" : mode === "router" ? "router_events" : "playback_events"
+    setSource(target)
+    setEventTypesList(
+      target === "wearable_events"
+        ? DEFAULT_WEARABLE_EVENT_TYPES
+        : target === "router_events"
+        ? DEFAULT_ROUTER_EVENT_TYPES
+        : []
+    )
+    setSelectedTypes([])
+    setDeviceId("ALL")
+    setSubDeviceId("ALL")
+    setTotalCount(null)
+    setSampleRows([])
+  }, [mode])
+
   // Available column definitions for the active source
   const availableColumns: ExportColumnDef[] = React.useMemo(() => {
-    return source === "router_events" ? ROUTER_EVENT_COLUMNS : PLAYBACK_EVENT_COLUMNS
+    return source === "wearable_events"
+      ? WEARABLE_EVENT_COLUMNS
+      : source === "router_events"
+      ? ROUTER_EVENT_COLUMNS
+      : PLAYBACK_EVENT_COLUMNS
   }, [source])
 
   // Sync default column keys when source changes
@@ -207,6 +254,58 @@ export function ReportsClient() {
     }
   }
 
+  // Direct client fallback for count and preview if API is busy
+  const fallbackClientPreview = React.useCallback(async () => {
+    try {
+      const table = source === "wearable_events" ? "wearable_events" : source === "router_events" ? "router_events" : "playback_events"
+      let countQ = supabase.from(table).select("*", { count: "exact", head: true })
+      let sampleQ = supabase.from(table).select("*").order("timestamp", { ascending: false }).limit(10)
+
+      if (selectedTypes.length > 0) {
+        countQ = countQ.in("type", selectedTypes)
+        sampleQ = sampleQ.in("type", selectedTypes)
+      }
+      if (deviceId !== "ALL") {
+        countQ = countQ.eq("device_id", deviceId)
+        sampleQ = sampleQ.eq("device_id", deviceId)
+      }
+      if (source === "router_events") {
+        if (subDeviceId === "NULL") {
+          countQ = countQ.is("sub_device_id", null)
+          sampleQ = sampleQ.is("sub_device_id", null)
+        } else if (subDeviceId !== "ALL") {
+          countQ = countQ.eq("sub_device_id", subDeviceId)
+          sampleQ = sampleQ.eq("sub_device_id", subDeviceId)
+        }
+      }
+      if (startIso) {
+        countQ = countQ.gte("timestamp", startIso)
+        sampleQ = sampleQ.gte("timestamp", startIso)
+      }
+      if (endIso) {
+        countQ = countQ.lte("timestamp", endIso)
+        sampleQ = sampleQ.lte("timestamp", endIso)
+      }
+
+      const [{ count }, { data: sampleData }] = await Promise.all([countQ, sampleQ])
+      setTotalCount(count ?? 0)
+
+      if (sampleData) {
+        const typeMap = new Map<number, string>(eventTypesList.map((t) => [t.type, t.name]))
+        const flattened = sampleData.map((row) =>
+          source === "wearable_events"
+            ? flattenWearableEventRow(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
+            : source === "router_events"
+            ? flattenRouterEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
+            : flattenPlaybackEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
+        )
+        setSampleRows(flattened)
+      }
+    } catch (e) {
+      console.error("Client fallback preview error:", e)
+    }
+  }, [source, supabase, selectedTypes, deviceId, subDeviceId, startIso, endIso, eventTypesList, selectedTimezone, formatTimestamps])
+
   // Fetch Preview & Metadata from API or Supabase
   const loadPreviewData = React.useCallback(async () => {
     setIsLoadingPreview(true)
@@ -257,73 +356,12 @@ export function ReportsClient() {
     } finally {
       setIsLoadingPreview(false)
     }
-  }, [source, selectedTypes, deviceId, subDeviceId, startIso, endIso, searchTerm, selectedTimezone, formatTimestamps])
-
-  // Direct client fallback for count and preview if API is busy
-  const fallbackClientPreview = async () => {
-    try {
-      const table = source === "router_events" ? "router_events" : "playback_events"
-      let countQ = supabase.from(table).select("*", { count: "exact", head: true })
-      let sampleQ = supabase.from(table).select("*").order("timestamp", { ascending: false }).limit(10)
-
-      if (selectedTypes.length > 0) {
-        countQ = countQ.in("type", selectedTypes)
-        sampleQ = sampleQ.in("type", selectedTypes)
-      }
-      if (deviceId !== "ALL") {
-        countQ = countQ.eq("device_id", deviceId)
-        sampleQ = sampleQ.eq("device_id", deviceId)
-      }
-      if (source === "router_events") {
-        if (subDeviceId === "NULL") {
-          countQ = countQ.is("sub_device_id", null)
-          sampleQ = sampleQ.is("sub_device_id", null)
-        } else if (subDeviceId !== "ALL") {
-          countQ = countQ.eq("sub_device_id", subDeviceId)
-          sampleQ = sampleQ.eq("sub_device_id", subDeviceId)
-        }
-      }
-      if (startIso) {
-        countQ = countQ.gte("timestamp", startIso)
-        sampleQ = sampleQ.gte("timestamp", startIso)
-      }
-      if (endIso) {
-        countQ = countQ.lte("timestamp", endIso)
-        sampleQ = sampleQ.lte("timestamp", endIso)
-      }
-
-      const [{ count }, { data: sampleData }] = await Promise.all([countQ, sampleQ])
-      setTotalCount(count ?? 0)
-
-      if (sampleData) {
-        const typeMap = new Map<number, string>(eventTypesList.map((t) => [t.type, t.name]))
-        const flattened = sampleData.map((row) =>
-          source === "router_events"
-            ? flattenRouterEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
-            : flattenPlaybackEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
-        )
-        setSampleRows(flattened)
-      }
-    } catch (e) {
-      console.error("Client fallback preview error:", e)
-    }
-  }
+  }, [source, selectedTypes, deviceId, subDeviceId, startIso, endIso, searchTerm, selectedTimezone, formatTimestamps, fallbackClientPreview])
 
   // Load preview whenever filters or source change
   React.useEffect(() => {
     loadPreviewData()
   }, [loadPreviewData])
-
-  // Reset types selection when changing source
-  const handleSourceChange = (newSource: ReportSource) => {
-    if (newSource === source) return
-    setSource(newSource)
-    setSelectedTypes([])
-    setDeviceId("ALL")
-    setSubDeviceId("ALL")
-    setTotalCount(null)
-    setSampleRows([])
-  }
 
   // Multi-type selection handlers
   const toggleType = (typeId: number) => {
@@ -436,10 +474,10 @@ export function ReportsClient() {
   }
 
   // Client-side fallback chunked export for extra resilience
-  const runClientFallbackExport = async () => {
+  const runClientFallbackExport = React.useCallback(async () => {
     try {
       setExportProgress({ percent: 20, message: "Querying Supabase database directly..." })
-      const table = source === "router_events" ? "router_events" : "playback_events"
+      const table = source === "wearable_events" ? "wearable_events" : source === "router_events" ? "router_events" : "playback_events"
       const maxRows = rowLimit > 0 ? rowLimit : 50000
       const pageSize = 1000
       let fetched: any[] = []
@@ -493,7 +531,9 @@ export function ReportsClient() {
 
       const typeMap = new Map<number, string>(eventTypesList.map((t) => [t.type, t.name]))
       const flattened = fetched.map((row) =>
-        source === "router_events"
+        source === "wearable_events"
+          ? flattenWearableEventRow(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
+          : source === "router_events"
           ? flattenRouterEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
           : flattenPlaybackEvent(row, { timezone: selectedTimezone, formatTimestamps, typeNamesMap: typeMap })
       )
@@ -502,7 +542,8 @@ export function ReportsClient() {
       const baseFilename = `${source}_report_${timestampIso}`
 
       if (exportFormat === "xlsx") {
-        const sheetTitle = source === "router_events" ? "Router Events" : "Playback Events"
+        const sheetTitle =
+          source === "wearable_events" ? "Wearable Events" : source === "router_events" ? "Router Events" : "Playback Events"
         const buffer = generateXlsxBuffer(flattened, availableColumns, sheetTitle, selectedColumnKeys)
         const blob = new Blob([buffer as any], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -529,7 +570,7 @@ export function ReportsClient() {
       setExportProgress(null)
       alert(`Export failed: ${e.message || "Unknown error"}`)
     }
-  }
+  }, [source, rowLimit, supabase, selectedTypes, deviceId, subDeviceId, startIso, endIso, totalCount, searchTerm, eventTypesList, selectedTimezone, formatTimestamps, exportFormat, availableColumns, selectedColumnKeys])
 
   // Copy sample preview to clipboard as CSV
   const handleCopyCsvPreview = () => {
@@ -540,17 +581,6 @@ export function ReportsClient() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Helper to trigger browser download
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
 
   // Filtered types in multi-select popover
   const filteredEventTypes = React.useMemo(() => {
@@ -608,108 +638,43 @@ export function ReportsClient() {
     >
       <div className="flex flex-col gap-6 w-full min-w-0">
 
-        {/* 1. DATA SOURCE SELECTION CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Router Events Card */}
-          <div
-            onClick={() => handleSourceChange("router_events")}
-            className={cn(
-              "relative flex flex-col p-4 rounded-xl border transition-all cursor-pointer select-none",
-              source === "router_events"
-                ? "bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30"
-                : "bg-card border-border hover:border-border/80 hover:bg-muted/10 text-muted-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "p-2 rounded-lg shrink-0",
-                    source === "router_events"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  <Radio className="size-4.5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                    Router Events
-                    <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-normal">
-                      router_events
-                    </span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Wi-Fi connects, DNS domain activities, consumer bandwidth & sessions
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center">
-                {source === "router_events" ? (
-                  <div className="size-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-                    <Check className="size-3 stroke-[3]" />
-                  </div>
-                ) : (
-                  <div className="size-5 rounded-full border border-border shrink-0" />
-                )}
-              </div>
+        {/* Active Telemetry Stream Context (automatically driven by topbar mode) */}
+        <div className="flex items-center justify-between p-3.5 bg-card border border-border rounded-xl shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+              {source === "wearable_events" ? (
+                <Watch className="size-5 text-emerald-500" />
+              ) : source === "router_events" ? (
+                <Radio className="size-5 text-sky-500" />
+              ) : (
+                <Database className="size-5 text-primary" />
+              )}
             </div>
-
-            <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-xs font-mono">
-              <span className="text-muted-foreground">Event Types: 11 categories</span>
-              <span className="text-primary font-semibold">16,500+ records</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm text-foreground">
+                  {source === "wearable_events"
+                    ? "Wearable Telemetry Report"
+                    : source === "router_events"
+                    ? "Router Telemetry Report"
+                    : "SDK Telemetry Report"}
+                </span>
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium border border-border">
+                  {source}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {source === "wearable_events"
+                  ? "Acoustic mic watermarks, song verification matches, and wearable device Wi-Fi connectivity heartbeats."
+                  : source === "router_events"
+                  ? "Wi-Fi connections, DNS domain activity, bandwidth usage, and hardware telemetry records."
+                  : "Client application media streaming sessions, playback events, and quality metrics."}
+              </p>
             </div>
           </div>
-
-          {/* Events Explorer / Playback Events Card */}
-          <div
-            onClick={() => handleSourceChange("playback_events")}
-            className={cn(
-              "relative flex flex-col p-4 rounded-xl border transition-all cursor-pointer select-none",
-              source === "playback_events"
-                ? "bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30"
-                : "bg-card border-border hover:border-border/80 hover:bg-muted/10 text-muted-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "p-2 rounded-lg shrink-0",
-                    source === "playback_events"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  <Database className="size-4.5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                    Events Explorer
-                    <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-normal">
-                      playback_events
-                    </span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Media streaming telemetry, play/pause/heartbeat triggers & audience reach
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center">
-                {source === "playback_events" ? (
-                  <div className="size-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-                    <Check className="size-3 stroke-[3]" />
-                  </div>
-                ) : (
-                  <div className="size-5 rounded-full border border-border shrink-0" />
-                )}
-              </div>
-            </div>
-
-            <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-xs font-mono">
-              <span className="text-muted-foreground">Event Types: 6 telemetry triggers</span>
-              <span className="text-primary font-semibold">Audience telemetry</span>
-            </div>
+          <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-muted-foreground">
+            <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Mode Synced</span>
           </div>
         </div>
 
@@ -893,6 +858,13 @@ export function ReportsClient() {
                       <SelectItem value="SUB_002">SUB_002</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              ) : source === "wearable_events" ? (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-foreground">Wearable Scope</label>
+                  <div className="h-9 px-3 rounded-md border border-border bg-muted/20 flex items-center text-xs text-muted-foreground font-mono">
+                    All Wearables & Mic Nodes
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5">
@@ -1181,7 +1153,7 @@ export function ReportsClient() {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                  <span>Source: <strong className="text-foreground">{source === "router_events" ? "Router Events" : "Events Explorer"}</strong></span>
+                  <span>Source: <strong className="text-foreground">{source === "wearable_events" ? "Wearable Events" : source === "router_events" ? "Router Events" : "SDK Events"}</strong></span>
                   <span>•</span>
                   <span>Format: <strong className="text-foreground font-mono uppercase">{exportFormat}</strong></span>
                   <span>•</span>
