@@ -50,7 +50,29 @@ export async function POST(request: Request) {
 
     const publicUrl = publicUrlData.publicUrl
 
-    // Automatically sync into mappings.json in Supabase Storage
+    // Automatically sync into platform_mappings PostgreSQL table
+    const fileKey = (keyParam || rawFileName.replace(/\.[^/.]+$/, "")).toLowerCase()
+    const formattedName = nameParam || fileKey
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+
+    try {
+      await supabaseAdmin.from("platform_mappings").upsert(
+        {
+          key: fileKey,
+          name: formattedName,
+          icon_url: publicUrl,
+          file_name: rawFileName,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      )
+    } catch (dbErr) {
+      console.warn("Could not upsert to platform_mappings table:", dbErr)
+    }
+
+    // Also sync into mappings.json in Supabase Storage for backwards compatibility
     try {
       let mappings: any[] = []
       const { data: mappingFileData } = await supabaseAdmin.storage

@@ -12,7 +12,6 @@ import {
   Edit3,
   ExternalLink,
   RefreshCw,
-  Info,
   Tv,
 } from "lucide-react"
 import { PageContainer } from "./page-container"
@@ -237,20 +236,6 @@ export function PlatformMappingClient() {
               <Plus className="size-3.5" />
               Add Platform Mapping
             </Button>
-          </div>
-        </div>
-
-        {/* Bucket Info Banner */}
-        <div className="flex items-start gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg text-xs text-muted-foreground select-none">
-          <Info className="size-4 text-primary shrink-0 mt-0.5" />
-          <div className="space-y-0.5 flex-1">
-            <span className="font-semibold text-foreground">Supabase Storage Bucket: </span>
-            <code className="bg-muted px-1.5 py-0.5 rounded text-primary font-mono text-[11px] border border-border">
-              router-device-assets / ott-icons
-            </code>
-            <p className="mt-1 text-muted-foreground">
-              Icons uploaded here are rendered automatically across Rules conditions, Events Explorer details, Sessions, and Dashboard telemetry feeds.
-            </p>
           </div>
         </div>
 
