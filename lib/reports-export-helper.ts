@@ -301,9 +301,11 @@ export function flattenWearableEventRow(
 
   let summary = ""
   if (typeId === 1) {
-    summary = `[Song] ${record.content || "Song Detected"} • Watermark Verified`
+    const songName = record.content || details.content || details.song || details.title || "Song Detected"
+    summary = `[Song] ${songName} • Watermark Verified`
   } else if (typeId === 2) {
-    summary = `[Listening] ${record.content || "Heartbeat"} • Mic Active`
+    const wm = record.content || details.content || "Heartbeat"
+    summary = `[Listening] ${wm} • Carrier Heartbeat`
   } else if (typeId === 3) {
     const status = record.wifi_status || details.wifi || "ON"
     const ssid = record.ssid ? ` • SSID: ${record.ssid}` : ""

@@ -261,11 +261,11 @@ export function UniversalEventsClient({
             if (isWearable) {
               detailsObj = {
                 ...detailsObj,
-                content_type: d.content_type ?? detailsObj.content_type,
-                content: d.content ?? detailsObj.content,
-                wifi_status: d.wifi_status ?? detailsObj.wifi_status,
+                content_type: d.content_type ?? detailsObj.content_type ?? (d.type === 1 ? "song" : ""),
+                content: d.content ?? detailsObj.content ?? detailsObj.song ?? detailsObj.title ?? "",
+                wifi_status: d.wifi_status ?? detailsObj.wifi_status ?? detailsObj.wifi ?? "",
                 wifi_connected: d.wifi_connected ?? detailsObj.wifi_connected,
-                ssid: d.ssid ?? detailsObj.ssid,
+                ssid: d.ssid ?? detailsObj.ssid ?? "",
               }
             }
             return {

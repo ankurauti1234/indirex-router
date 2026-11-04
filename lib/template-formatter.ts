@@ -163,9 +163,25 @@ export function renderEventSummary(
   const workingDetails = JSON.parse(JSON.stringify(details))
 
   // Apply active rule condition mutations to workingDetails
+  // Exclude content, title, and key identifier fields from being mutated so actual entity values (e.g. song titles, SSIDs) are preserved
+  const protectedFields = new Set([
+    "content",
+    "title",
+    "content.title",
+    "song",
+    "device_id",
+    "sub_device_id",
+    "ssid",
+    "mac",
+    "ip",
+    "device_ip",
+    "device_mac",
+    "device_hostname",
+  ])
+
   if (Array.isArray(rules) && rules.length > 0) {
     rules.forEach((r) => {
-      if (evaluateRuleCondition(workingDetails, r)) {
+      if (!protectedFields.has(r.field) && evaluateRuleCondition(workingDetails, r)) {
         setNestedProperty(workingDetails, r.field, r.display_text)
       }
     })
@@ -176,8 +192,14 @@ export function renderEventSummary(
   if (output) {
     // 1. Resolve curly brace bindings e.g. {playback.playhead_position}
     output = output.replace(/\{([a-zA-Z0-9_.]+)\}/g, (_, key) => {
-      const val = getNestedProperty(workingDetails, key)
-      if (val === undefined || val === null) return ""
+      let val = getNestedProperty(workingDetails, key)
+      if (val === undefined || val === null || String(val).trim() === "") {
+        if (key === "content" && (typeId === 1 || workingDetails.content_type === "song")) {
+          val = workingDetails.song || workingDetails.title || "Song Detected"
+        } else {
+          return ""
+        }
+      }
       if (typeof val === "object") return Array.isArray(val) ? `[${val.length} items]` : JSON.stringify(val)
       return String(val)
     })

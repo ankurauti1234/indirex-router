@@ -54,7 +54,7 @@ export const useTelemetryModeStore = create<TelemetryModeState>((set, get) => {
 
       switchTimer = setTimeout(() => {
         set({ isSwitching: false, targetMode: null })
-      }, 420)
+      }, 240)
     },
     toggleMode: () => {
       const order: TelemetryMode[] = ["sdk", "router", "wearable"]
