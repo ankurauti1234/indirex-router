@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS public.wearable_event_types (
 INSERT INTO public.wearable_event_types (type, name, description) VALUES
   (1, 'SONG_MATCHED',        'Song watermark detected and verified by mic. Sent every 10s while match active.'),
   (2, 'WATERMARK_LISTENING', 'Mic listening / carrier heartbeat. Sent every 15s.'),
-  (3, 'WIFI_STATUS',         'WiFi on/off/connect/disconnect event + 180s periodic heartbeat.')
+  (3, 'WIFI_STATUS',         'WiFi on/off/connect/disconnect event + 180s periodic heartbeat.'),
+  (4, 'DEVICE_CALIBRATION',  'Wearable device installation, member assignment, and diagnostic calibration summary.')
 ON CONFLICT (type) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description;

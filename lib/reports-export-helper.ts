@@ -82,6 +82,7 @@ export const WEARABLE_EVENT_TYPE_NAMES: Record<number, string> = {
   1: "SONG_MATCHED",
   2: "WATERMARK_LISTENING",
   3: "WIFI_STATUS",
+  4: "DEVICE_CALIBRATION",
 }
 
 export const PLAYBACK_EVENT_TYPE_NAMES: Record<number, string> = {
@@ -311,6 +312,16 @@ export function flattenWearableEventRow(
     const ssid = record.ssid ? ` • SSID: ${record.ssid}` : ""
     const conn = record.wifi_connected !== undefined ? (record.wifi_connected ? " • Connected" : " • Disconnected") : ""
     summary = `[WiFi ${status}]${ssid}${conn}`
+  } else if (typeId === 4) {
+    const status = details.status || details.calibration_summary?.registration || "Installed"
+    const hh = details.hh_id ? `HH: ${details.hh_id}` : ""
+    const member = details.member_id ? `Member: ${details.member_id}` : ""
+    const serial = details.serial_no ? `Serial: ${details.serial_no}` : ""
+    const battery = details.calibration_summary?.diagnostics?.battery_health?.percentage
+      ? `Battery: ${details.calibration_summary.diagnostics.battery_health.percentage}`
+      : ""
+    const parts = [hh, member, serial, battery].filter(Boolean).join(" • ")
+    summary = `[Registration ${status}] ${parts}`.trim()
   } else {
     summary = `Wearable Type ${typeId}`
   }

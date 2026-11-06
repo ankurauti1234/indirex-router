@@ -292,6 +292,19 @@ function buildIntelligentFallbackSummary(details: any, badgePrefix: string, type
     return `${badgePrefix}[Listening] ${watermark} • Mic Active`.trim()
   }
 
+  // Wearable Device Calibration / Registration
+  if (typeId === 4 || details.calibration_summary || details.meter_id) {
+    const status = details.status || details.calibration_summary?.registration || "Installed"
+    const hh = details.hh_id ? `HH: ${details.hh_id}` : ""
+    const member = details.member_id ? `Member: ${details.member_id}` : ""
+    const serial = details.serial_no ? `Serial: ${details.serial_no}` : ""
+    const battery = details.calibration_summary?.diagnostics?.battery_health?.percentage
+      ? `Battery: ${details.calibration_summary.diagnostics.battery_health.percentage}`
+      : ""
+    const parts = [hh, member, serial, battery].filter(Boolean).join(" • ")
+    return `${badgePrefix}[Registration ${status}] ${parts}`.trim()
+  }
+
   // Check for router streaming session first
   const sess = details.session || details.session_summary
   if (sess && typeof sess === "object") {

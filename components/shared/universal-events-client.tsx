@@ -261,9 +261,9 @@ export function UniversalEventsClient({
             if (isWearable) {
               detailsObj = {
                 ...detailsObj,
-                content_type: d.content_type ?? detailsObj.content_type ?? (d.type === 1 ? "song" : ""),
+                content_type: d.content_type ?? detailsObj.content_type ?? (d.type === 1 ? "song" : d.type === 4 ? "calibration" : ""),
                 content: d.content ?? detailsObj.content ?? detailsObj.song ?? detailsObj.title ?? "",
-                wifi_status: d.wifi_status ?? detailsObj.wifi_status ?? detailsObj.wifi ?? "",
+                wifi_status: d.wifi_status ?? detailsObj.wifi_status ?? detailsObj.calibration_summary?.diagnostics?.wifi_status ?? detailsObj.wifi ?? "",
                 wifi_connected: d.wifi_connected ?? detailsObj.wifi_connected,
                 ssid: d.ssid ?? detailsObj.ssid ?? "",
               }
