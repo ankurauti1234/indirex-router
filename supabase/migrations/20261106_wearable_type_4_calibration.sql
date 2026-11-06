@@ -8,3 +8,4 @@ INSERT INTO public.wearable_event_types (type, name, description) VALUES
 ON CONFLICT (type) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description;
+

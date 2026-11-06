@@ -147,7 +147,7 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
     } catch (e) {
       console.warn("Failed loading event types:", e)
     }
-  }, [isRouter, supabase])
+  }, [isRouter, isWearable, supabase])
 
   React.useEffect(() => {
     loadData()
@@ -199,7 +199,25 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
     }
 
     try {
-      if (isRouter) {
+      if (isWearable) {
+        const res = await fetch("/api/wearable-event-types", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: typeNum,
+            name: newName.trim().toUpperCase(),
+            description: newDesc.trim(),
+            template: newTemplate.trim() || undefined,
+            structure: structObj,
+            sample: sampleObj,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          setAddError(err.error || "Failed to create wearable event type")
+          return
+        }
+      } else if (isRouter) {
         const res = await fetch("/api/router-event-types", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -262,7 +280,23 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
     }
 
     try {
-      if (isRouter) {
+      if (isWearable) {
+        const res = await fetch("/api/wearable-event-types", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: editId,
+            name: editName.trim().toUpperCase(),
+            description: editDesc.trim(),
+            template: editTemplate.trim() || undefined,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          setEditError(err.error || "Failed to update wearable event type")
+          return
+        }
+      } else if (isRouter) {
         const res = await fetch("/api/router-event-types", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -520,9 +554,13 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add Event Type ({isRouter ? "Router" : "SDK"})</DialogTitle>
+              <DialogTitle>Add Event Type ({isWearable ? "Wearable" : isRouter ? "Router" : "SDK"})</DialogTitle>
               <DialogDescription>
-                Register a new event code in {isRouter ? "router_event_types" : "event_types"} table.
+                Register a new event code in{" "}
+                <span className="font-mono text-foreground font-semibold">
+                  {isWearable ? "wearable_event_types" : isRouter ? "router_event_types" : "event_types"}
+                </span>{" "}
+                table.
               </DialogDescription>
             </DialogHeader>
 
@@ -535,19 +573,43 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
             <div className="space-y-3 py-2 text-xs">
               <div>
                 <label className="font-semibold block mb-1">Type ID (smallint)</label>
-                <Input placeholder="e.g. 15" value={newId} onChange={(e) => setNewId(e.target.value)} />
+                <Input
+                  placeholder={isWearable ? "e.g. 5" : isRouter ? "e.g. 15" : "e.g. 9"}
+                  value={newId}
+                  onChange={(e) => setNewId(e.target.value)}
+                />
               </div>
               <div>
                 <label className="font-semibold block mb-1">Type Name</label>
-                <Input placeholder="e.g. BANDWIDTH_LIMIT" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                <Input
+                  placeholder={isWearable ? "e.g. BATTERY_ALERT" : isRouter ? "e.g. BANDWIDTH_LIMIT" : "e.g. APP_LAUNCH"}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
               </div>
               <div>
                 <label className="font-semibold block mb-1">Description</label>
-                <Input placeholder="Event purpose summary" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+                <Input
+                  placeholder={
+                    isWearable
+                      ? "Acoustic mic watermark, battery or connectivity heartbeat"
+                      : "Event purpose and telemetry payload summary"
+                  }
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                />
               </div>
               <div>
                 <label className="font-semibold block mb-1">Display Template (Optional)</label>
-                <Input placeholder="[{field}] message • {other}" value={newTemplate} onChange={(e) => setNewTemplate(e.target.value)} />
+                <Input
+                  placeholder={
+                    isWearable
+                      ? "[{status}] Battery: {battery}% • {state}"
+                      : "[{field}] message • {other}"
+                  }
+                  value={newTemplate}
+                  onChange={(e) => setNewTemplate(e.target.value)}
+                />
               </div>
             </div>
 
@@ -562,8 +624,14 @@ export function UniversalEventMappingClient({ forcedMode }: UniversalEventMappin
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Edit Event Type ({editId})</DialogTitle>
-              <DialogDescription>Update event definition in database.</DialogDescription>
+              <DialogTitle>Edit Event Type ({editId}) - {isWearable ? "Wearable" : isRouter ? "Router" : "SDK"}</DialogTitle>
+              <DialogDescription>
+                Update event definition in{" "}
+                <span className="font-mono text-foreground font-semibold">
+                  {isWearable ? "wearable_event_types" : isRouter ? "router_event_types" : "event_types"}
+                </span>{" "}
+                table.
+              </DialogDescription>
             </DialogHeader>
 
             {editError && (
