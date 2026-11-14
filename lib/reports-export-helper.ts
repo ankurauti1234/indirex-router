@@ -302,8 +302,9 @@ export function flattenWearableEventRow(
 
   let summary = ""
   if (typeId === 1) {
-    const songName = record.content || details.content || details.song || details.title || "Song Detected"
-    summary = `[Song] ${songName} • Watermark Verified`
+    const category = details.content_type || record.content_type || "Content"
+    const mediaName = record.content || details.content || details.song || details.title || "Channel Matched"
+    summary = `[${category}] ${mediaName} • Watermark Verified`
   } else if (typeId === 2) {
     const wm = record.content || details.content || "Heartbeat"
     summary = `[Listening] ${wm} • Carrier Heartbeat`

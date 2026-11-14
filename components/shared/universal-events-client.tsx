@@ -259,13 +259,17 @@ export function UniversalEventsClient({
               detailsObj = d.details
             }
             if (isWearable) {
+              const ct = detailsObj.content_type || d.content_type || (d.type === 4 ? "calibration" : "")
+              const cnt = detailsObj.content || d.content || detailsObj.song || detailsObj.title || ""
+              const st = detailsObj.status || d.status || (d.type === 1 ? "matched" : "")
               detailsObj = {
                 ...detailsObj,
-                content_type: d.content_type ?? detailsObj.content_type ?? (d.type === 1 ? "song" : d.type === 4 ? "calibration" : ""),
-                content: d.content ?? detailsObj.content ?? detailsObj.song ?? detailsObj.title ?? "",
-                wifi_status: d.wifi_status ?? detailsObj.wifi_status ?? detailsObj.calibration_summary?.diagnostics?.wifi_status ?? detailsObj.wifi ?? "",
-                wifi_connected: d.wifi_connected ?? detailsObj.wifi_connected,
-                ssid: d.ssid ?? detailsObj.ssid ?? "",
+                content_type: ct,
+                content: cnt,
+                status: st,
+                wifi_status: detailsObj.wifi_status || d.wifi_status || detailsObj.calibration_summary?.diagnostics?.wifi_status || detailsObj.wifi || "",
+                wifi_connected: detailsObj.wifi_connected !== undefined ? detailsObj.wifi_connected : d.wifi_connected,
+                ssid: detailsObj.ssid || d.ssid || "",
               }
             }
             return {
@@ -496,9 +500,12 @@ export function UniversalEventsClient({
       displaySummary = displaySummary.replace(platRegex, "")
     }
 
-    // Deduplicate any badge text that might also appear in displaySummary
+    const isCategoryBadge = (text: string) =>
+      Boolean(evt.details?.content_type && text.toLowerCase() === String(evt.details.content_type).toLowerCase())
+
+    // Deduplicate any badge text that might also appear in displaySummary (preserve content_type categories)
     matchedBadges.forEach((b) => {
-      if (b.display_text) {
+      if (b.display_text && !isCategoryBadge(b.display_text)) {
         displaySummary = displaySummary
           .replace(new RegExp(`^\\[${b.display_text}\\]\\s*`, "i"), "")
           .replace(new RegExp(`\\bReason:\\s*${b.display_text}\\b\\s*•?`, "i"), "")

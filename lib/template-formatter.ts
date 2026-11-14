@@ -166,6 +166,7 @@ export function renderEventSummary(
   // Exclude content, title, and key identifier fields from being mutated so actual entity values (e.g. song titles, SSIDs) are preserved
   const protectedFields = new Set([
     "content",
+    "content_type",
     "title",
     "content.title",
     "song",
@@ -194,8 +195,10 @@ export function renderEventSummary(
     output = output.replace(/\{([a-zA-Z0-9_.]+)\}/g, (_, key) => {
       let val = getNestedProperty(workingDetails, key)
       if (val === undefined || val === null || String(val).trim() === "") {
-        if (key === "content" && (typeId === 1 || workingDetails.content_type === "song")) {
-          val = workingDetails.song || workingDetails.title || "Song Detected"
+        if (key === "content" && (typeId === 1 || workingDetails.content_type)) {
+          val = workingDetails.content || workingDetails.song || workingDetails.title || "Channel Matched"
+        } else if (key === "content_type" && typeId === 1) {
+          val = workingDetails.content_type || "Content"
         } else {
           return ""
         }
@@ -281,10 +284,11 @@ function buildIntelligentFallbackSummary(details: any, badgePrefix: string, type
     return `${badgePrefix}[WiFi ${status}]${ssid}${connState}`.trim()
   }
 
-  // Wearable Song match / Watermark
-  if (details.content_type === "song" || (typeId === 1 && details.content)) {
-    const song = details.content || "Song Detected"
-    return `${badgePrefix}[Song] ${song} • Watermark Verified`.trim()
+  // Wearable Content match / Watermark (News, Radio, Sports, Songs, etc.)
+  if (details.content_type || (typeId === 1 && (details.content || details.status === "matched"))) {
+    const category = details.content_type || "Content"
+    const content = details.content || details.song || details.title || "Channel Matched"
+    return `${badgePrefix}[${category}] ${content} • Watermark Verified`.trim()
   }
 
   if (typeId === 2 && (details.content || details.details?.carrier)) {

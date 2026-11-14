@@ -22,11 +22,12 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
   {
     type: 1,
     name: "SONG_MATCHED",
-    description: "Song watermark detected and verified by mic. Sent every 10s while match active.",
-    template: "[Song] {content} • Watermark Verified",
+    description: "Acoustic watermark matched across media channels (News, Radio, Sports, Songs, etc.). Sent periodically while match active.",
+    template: "[{content_type}] {content} • Watermark Verified",
     structure: {
-      content_type: "song",
-      content: "string (song title)",
+      status: "string ('matched')",
+      content_type: "string ('News' | 'Radio' | 'Sports and Entertainment' | 'Songs')",
+      content: "string (e.g. 'Channel 1', 'Channel 2')",
       details: {
         confidence: "float",
         watermark_id: "string",
@@ -35,8 +36,9 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
       },
     },
     sample: {
-      content_type: "song",
-      content: "Tum Hi Ho - Arijit Singh",
+      status: "matched",
+      content_type: "News",
+      content: "Channel 2",
       details: {
         confidence: 0.98,
         watermark_id: "WM_0842",
@@ -46,11 +48,11 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
     },
     field_rules: [
       {
-        id: "rule-wearable-song-match",
-        field: "content_type",
+        id: "rule-wearable-status-matched",
+        field: "status",
         operator: "equals",
-        value: "song",
-        display_text: "Song Match",
+        value: "matched",
+        display_text: "Matched",
         badge_color: "success",
         enabled: true,
       },
