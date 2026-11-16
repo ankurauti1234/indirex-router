@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20261116_wearable_type_6_platform_detection.sql
--- Description: Add Wearable Event Type 6 (PLATFORM_DETECTION)
+-- Description: Add Wearable Event Type 6 (PLATFORM_DETECTION) with Smart TV & OTT App fields
 -- ==============================================================================
 
 -- 1. Ensure table structure supports metadata columns
@@ -16,41 +16,49 @@ INSERT INTO public.wearable_event_types (type, name, description, template, stru
 VALUES (
   6,
   'PLATFORM_DETECTION',
-  'Streaming platform, OTT service, or broadcast app detected on the wearable device.',
-  '[{platform}] {content} • Platform Detected',
+  'Smart TV / OTT platform & active app detection (Google Cast, Android TV, Netflix, YouTube, etc.).',
+  '[{active_app}] {tv_brand} ({tv_model}) • {tv_platform} • IP: {tv_ip} • {source}',
   '{
-    "platform": "string (e.g. YouTube, Netflix, Hotstar, Spotify)",
-    "content": "string (e.g. Channel 1, Live Stream)",
-    "status": "string (detected | active)",
-    "details": {
-      "domain": "string",
-      "category": "string (OTT | Social | Music)",
-      "confidence": "float",
-      "duration_sec": "int"
-    }
+    "tv_ip": "string",
+    "source": "string (e.g. CAST_8009)",
+    "meter_id": "string",
+    "tv_brand": "string",
+    "tv_model": "string",
+    "active_app": "string (e.g. Netflix, YouTube)",
+    "tv_platform": "string (e.g. Google Cast / Android TV)",
+    "content_type": "string",
+    "content": "string",
+    "status": "string",
+    "wifi_status": "string",
+    "wifi_connected": "boolean | null",
+    "ssid": "string"
   }'::jsonb,
   '{
-    "platform": "YouTube",
-    "content": "Live Stream",
-    "status": "detected",
-    "details": {
-      "domain": "youtube.com",
-      "category": "OTT",
-      "confidence": 0.95,
-      "duration_sec": 120
-    }
+    "tv_ip": "192.168.0.140",
+    "source": "CAST_8009",
+    "meter_id": "WMC074",
+    "tv_brand": "Android TV",
+    "tv_model": "Smart TV",
+    "active_app": "Netflix",
+    "tv_platform": "Google Cast / Android TV",
+    "content_type": "",
+    "content": "",
+    "status": "",
+    "wifi_status": "",
+    "wifi_connected": null,
+    "ssid": ""
   }'::jsonb,
   '[
-    {"id":"rule-wearable-platform-detected","field":"status","operator":"equals","value":"detected","display_text":"Platform Detected","badge_color":"success","enabled":true},
-    {"id":"rule-wearable-platform-active","field":"platform","operator":"not_equals","value":"","display_text":"OTT Active","badge_color":"info","enabled":true},
-    {"id":"rule-wearable-platform-category","field":"details.category","operator":"equals","value":"OTT","display_text":"Streaming OTT","badge_color":"default","enabled":true}
+    {"id":"rule-wearable-app-detected","field":"active_app","operator":"not_equals","value":"","display_text":"App Active","badge_color":"success","enabled":true},
+    {"id":"rule-wearable-cast-source","field":"source","operator":"contains","value":"CAST","display_text":"Google Cast","badge_color":"info","enabled":true},
+    {"id":"rule-wearable-smart-tv","field":"tv_platform","operator":"contains","value":"Android","display_text":"Android TV","badge_color":"default","enabled":true}
   ]'::jsonb
 )
 ON CONFLICT (type) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
-  template = COALESCE(wearable_event_types.template, EXCLUDED.template),
-  structure = COALESCE(wearable_event_types.structure, EXCLUDED.structure),
-  sample = COALESCE(wearable_event_types.sample, EXCLUDED.sample),
-  field_rules = COALESCE(wearable_event_types.field_rules, EXCLUDED.field_rules),
+  template = EXCLUDED.template,
+  structure = EXCLUDED.structure,
+  sample = EXCLUDED.sample,
+  field_rules = EXCLUDED.field_rules,
   updated_at = now();

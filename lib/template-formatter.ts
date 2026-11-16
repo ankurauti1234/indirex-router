@@ -305,10 +305,13 @@ function buildIntelligentFallbackSummary(details: any, badgePrefix: string, type
   }
 
   // Wearable Platform Detection (Type 6)
-  if (typeId === 6 || (details.platform && details.status === "detected")) {
-    const platform = details.platform || details.details?.platform || "Platform"
-    const content = details.content || details.domain || details.title || details.details?.domain || "Detected"
-    return `${badgePrefix}[${platform}] ${content} • Platform Detected`.trim()
+  if (typeId === 6 || details.active_app || (details.platform && details.status === "detected")) {
+    const app = details.active_app || details.platform || details.details?.platform || "Platform"
+    const tv = [details.tv_brand, details.tv_model].filter(Boolean).join(" ")
+    const platform = details.tv_platform ? ` • ${details.tv_platform}` : ""
+    const ip = details.tv_ip ? ` • IP: ${details.tv_ip}` : ""
+    const src = details.source ? ` • ${details.source}` : ""
+    return `${badgePrefix}[${app}] ${tv || "Smart TV"}${platform}${ip}${src}`.trim()
   }
 
   // Check for router streaming session first

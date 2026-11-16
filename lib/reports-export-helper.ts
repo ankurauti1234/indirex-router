@@ -321,9 +321,12 @@ export function flattenWearableEventRow(
     const parts = [hh, member, serial, battery].filter(Boolean).join(" • ")
     summary = `[Registration ${status}] ${parts}`.trim()
   } else if (typeId === 6) {
-    const platform = record.platform || details.platform || details.details?.platform || "Platform"
-    const content = record.content || details.content || details.title || details.domain || "Detected"
-    summary = `[${platform}] ${content} • Platform Detected`
+    const app = details.active_app || details.platform || record.platform || "Platform"
+    const tv = [details.tv_brand, details.tv_model].filter(Boolean).join(" ")
+    const platform = details.tv_platform ? ` • ${details.tv_platform}` : ""
+    const ip = details.tv_ip ? ` • IP: ${details.tv_ip}` : ""
+    const src = details.source ? ` • ${details.source}` : ""
+    summary = `[${app}] ${tv || "Smart TV"}${platform}${ip}${src}`
   } else {
     summary = `Wearable Type ${typeId}`
   }
