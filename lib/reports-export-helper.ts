@@ -82,6 +82,7 @@ export const WEARABLE_EVENT_TYPE_NAMES: Record<number, string> = {
   1: "SONG_MATCHED",
   3: "WIFI_STATUS",
   4: "DEVICE_CALIBRATION",
+  6: "PLATFORM_DETECTION",
 }
 
 export const PLAYBACK_EVENT_TYPE_NAMES: Record<number, string> = {
@@ -319,6 +320,10 @@ export function flattenWearableEventRow(
       : ""
     const parts = [hh, member, serial, battery].filter(Boolean).join(" • ")
     summary = `[Registration ${status}] ${parts}`.trim()
+  } else if (typeId === 6) {
+    const platform = record.platform || details.platform || details.details?.platform || "Platform"
+    const content = record.content || details.content || details.title || details.domain || "Detected"
+    summary = `[${platform}] ${content} • Platform Detected`
   } else {
     summary = `Wearable Type ${typeId}`
   }

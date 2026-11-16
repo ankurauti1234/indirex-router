@@ -304,6 +304,13 @@ function buildIntelligentFallbackSummary(details: any, badgePrefix: string, type
     return `${badgePrefix}[Registration ${status}] ${parts}`.trim()
   }
 
+  // Wearable Platform Detection (Type 6)
+  if (typeId === 6 || (details.platform && details.status === "detected")) {
+    const platform = details.platform || details.details?.platform || "Platform"
+    const content = details.content || details.domain || details.title || details.details?.domain || "Detected"
+    return `${badgePrefix}[${platform}] ${content} • Platform Detected`.trim()
+  }
+
   // Check for router streaming session first
   const sess = details.session || details.session_summary
   if (sess && typeof sess === "object") {

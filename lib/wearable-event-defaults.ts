@@ -241,5 +241,62 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
       },
     ],
   },
+  {
+    type: 6,
+    name: "PLATFORM_DETECTION",
+    description: "Streaming platform, OTT service, or broadcast app detected on the wearable device.",
+    template: "[{platform}] {content} • Platform Detected",
+    structure: {
+      platform: "string (e.g. 'YouTube', 'Netflix', 'Hotstar', 'Spotify')",
+      content: "string (e.g. 'Channel 1', 'Live Stream')",
+      status: "string ('detected' | 'active')",
+      details: {
+        domain: "string",
+        category: "string ('OTT' | 'Social' | 'Music')",
+        confidence: "float",
+        duration_sec: "int",
+      },
+    },
+    sample: {
+      platform: "YouTube",
+      content: "Live Stream",
+      status: "detected",
+      details: {
+        domain: "youtube.com",
+        category: "OTT",
+        confidence: 0.95,
+        duration_sec: 120,
+      },
+    },
+    field_rules: [
+      {
+        id: "rule-wearable-platform-detected",
+        field: "status",
+        operator: "equals",
+        value: "detected",
+        display_text: "Platform Detected",
+        badge_color: "success",
+        enabled: true,
+      },
+      {
+        id: "rule-wearable-platform-active",
+        field: "platform",
+        operator: "not_equals",
+        value: "",
+        display_text: "OTT Active",
+        badge_color: "info",
+        enabled: true,
+      },
+      {
+        id: "rule-wearable-platform-category",
+        field: "details.category",
+        operator: "equals",
+        value: "OTT",
+        display_text: "Streaming OTT",
+        badge_color: "default",
+        enabled: true,
+      },
+    ],
+  },
 ]
 

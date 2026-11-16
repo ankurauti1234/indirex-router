@@ -259,14 +259,16 @@ export function UniversalEventsClient({
               detailsObj = d.details
             }
             if (isWearable) {
-              const ct = detailsObj.content_type || d.content_type || (d.type === 4 ? "calibration" : "")
+              const ct = detailsObj.content_type || d.content_type || (d.type === 4 ? "calibration" : d.type === 6 ? (detailsObj.platform || "Platform") : "")
               const cnt = detailsObj.content || d.content || detailsObj.song || detailsObj.title || ""
-              const st = detailsObj.status || d.status || (d.type === 1 ? "matched" : "")
+              const st = detailsObj.status || d.status || (d.type === 1 ? "matched" : d.type === 6 ? (detailsObj.status || "detected") : "")
+              const plat = detailsObj.platform || d.platform || (d.type === 6 ? (detailsObj.platform || "Platform") : "")
               detailsObj = {
                 ...detailsObj,
                 content_type: ct,
                 content: cnt,
                 status: st,
+                platform: plat,
                 wifi_status: detailsObj.wifi_status || d.wifi_status || detailsObj.calibration_summary?.diagnostics?.wifi_status || detailsObj.wifi || "",
                 wifi_connected: detailsObj.wifi_connected !== undefined ? detailsObj.wifi_connected : d.wifi_connected,
                 ssid: detailsObj.ssid || d.ssid || "",
