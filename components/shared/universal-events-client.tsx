@@ -498,8 +498,8 @@ export function UniversalEventsClient({
 
     let displaySummary = summary
 
-    // If platform icon is rendered, strip leading bracketed platform matching the platform name so it isn't duplicated
-    if (iconUrl && platformName && displaySummary.startsWith("[")) {
+    // If platform icon is rendered (in router/sdk), strip leading bracketed platform matching the platform name so it isn't duplicated
+    if (!isWearable && iconUrl && platformName && displaySummary.startsWith("[")) {
       const platRegex = new RegExp(`^\\[${String(platformName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\s*`, "i")
       displaySummary = displaySummary.replace(platRegex, "")
     }
@@ -508,7 +508,9 @@ export function UniversalEventsClient({
       Boolean(
         (evt.details?.content_type && text.toLowerCase() === String(evt.details.content_type).toLowerCase()) ||
         (evt.details?.active_app && text.toLowerCase() === String(evt.details.active_app).toLowerCase()) ||
-        (evt.details?.platform && text.toLowerCase() === String(evt.details.platform).toLowerCase())
+        (evt.details?.platform && text.toLowerCase() === String(evt.details.platform).toLowerCase()) ||
+        text.toLowerCase() === "app active" ||
+        text.toLowerCase() === "platform detected"
       )
 
     // Deduplicate any badge text that might also appear in displaySummary (preserve content_type categories)
