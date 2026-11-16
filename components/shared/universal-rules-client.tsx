@@ -73,8 +73,9 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
   const [isUpdating, setIsUpdating] = React.useState(false)
   const [copiedText, setCopiedText] = React.useState<string | null>(null)
 
-  // Add rule state
+  // Add / Edit rule state
   const [showAddRule, setShowAddRule] = React.useState(false)
+  const [editingRuleId, setEditingRuleId] = React.useState<string | null>(null)
   const [newRuleField, setNewRuleField] = React.useState("device_details.event")
   const [newRuleOp, setNewRuleOp] = React.useState<DynamicFieldRule["operator"]>("equals")
   const [newRuleVal, setNewRuleVal] = React.useState("connected")
@@ -84,7 +85,7 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
   const loadData = React.useCallback(async () => {
     try {
       if (isWearable) {
-        const res = await fetch("/api/wearable-event-types", { cache: "no-store" })
+        const res = await fetch("/api/wearable-rules", { cache: "no-store" })
         if (res.ok) {
           const json = await res.json()
           if (json.success && Array.isArray(json.eventTypes)) {
@@ -140,7 +141,7 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
     } catch (e) {
       console.warn("Failed loading rules:", e)
     }
-  }, [isRouter, selectedType, supabase])
+  }, [isRouter, isWearable, selectedType, supabase])
 
   React.useEffect(() => {
     loadData()
@@ -169,8 +170,8 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
         prev.map((t) => (t.type === typeId ? { ...t, template: finalTemplate, field_rules: finalRules } : t))
       )
 
-      if (isRouter) {
-        await fetch("/api/router-rules", {
+      if (isWearable) {
+        const res = await fetch("/api/wearable-rules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -179,6 +180,24 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
             fieldRules: finalRules,
           }),
         })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          console.error("Failed saving wearable rules to DB:", err)
+        }
+      } else if (isRouter) {
+        const res = await fetch("/api/router-rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            typeId,
+            template: finalTemplate.trim(),
+            fieldRules: finalRules,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          console.error("Failed saving router rules to DB:", err)
+        }
       } else {
         const payload: any = {
           type_id: typeId,
@@ -189,7 +208,11 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
             _field_rules: finalRules,
           },
         }
-        await supabase.from("event_details_rules").upsert(payload, { onConflict: "type_id" })
+        const { error } = await supabase.from("event_details_rules").upsert(payload, { onConflict: "type_id" })
+        if (error) {
+          delete payload.field_rules
+          await supabase.from("event_details_rules").upsert(payload, { onConflict: "type_id" })
+        }
       }
 
       setEditingTemplate(false)
@@ -216,27 +239,62 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
     await handleSaveTypeRules(activeMeta.type, undefined, updated)
   }
 
-  // Add rule submit
-  const handleAddCondition = async () => {
-    if (!activeMeta || !newRuleField.trim() || !newRuleVal.trim() || !newRuleDisplay.trim()) return
+  // Start adding a new rule
+  const handleStartAddRule = () => {
+    setEditingRuleId(null)
+    setNewRuleField(isWearable ? "content_type" : isRouter ? "device_details.event" : "content.title")
+    setNewRuleOp("equals")
+    setNewRuleVal(isWearable ? "News" : isRouter ? "connected" : "live")
+    setNewRuleDisplay(isWearable ? "News Broadcast" : isRouter ? "Device Connected" : "Live Streaming")
+    setNewRuleBadge("success")
+    setShowAddRule(true)
+  }
 
-    const newRule: DynamicFieldRule = {
-      id: `rule-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-      field: newRuleField.trim(),
-      operator: newRuleOp,
-      value: newRuleVal.trim(),
-      display_text: newRuleDisplay.trim(),
-      badge_color: newRuleBadge,
-      enabled: true,
+  // Start editing an existing rule
+  const handleStartEditRule = (rule: DynamicFieldRule) => {
+    setEditingRuleId(rule.id)
+    setNewRuleField(rule.field)
+    setNewRuleOp(rule.operator)
+    setNewRuleVal(rule.value)
+    setNewRuleDisplay(rule.display_text)
+    setNewRuleBadge(rule.badge_color || "default")
+    setShowAddRule(true)
+  }
+
+  // Add or Update rule submit
+  const handleAddCondition = async () => {
+    if (!activeMeta || !newRuleField.trim() || !newRuleDisplay.trim()) return
+
+    let updated: DynamicFieldRule[]
+    if (editingRuleId) {
+      updated = (activeMeta.field_rules || []).map((r) =>
+        r.id === editingRuleId
+          ? {
+              ...r,
+              field: newRuleField.trim(),
+              operator: newRuleOp,
+              value: newRuleVal.trim(),
+              display_text: newRuleDisplay.trim(),
+              badge_color: newRuleBadge,
+            }
+          : r
+      )
+    } else {
+      const newRule: DynamicFieldRule = {
+        id: `rule-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        field: newRuleField.trim(),
+        operator: newRuleOp,
+        value: newRuleVal.trim(),
+        display_text: newRuleDisplay.trim(),
+        badge_color: newRuleBadge,
+        enabled: true,
+      }
+      updated = [...(activeMeta.field_rules || []), newRule]
     }
 
-    const updated = [...(activeMeta.field_rules || []), newRule]
     await handleSaveTypeRules(activeMeta.type, undefined, updated)
-
     setShowAddRule(false)
-    setNewRuleField(isRouter ? "device_details.event" : "content.title")
-    setNewRuleVal(isRouter ? "connected" : "live")
-    setNewRuleDisplay(isRouter ? "Device Connected" : "Live Streaming")
+    setEditingRuleId(null)
   }
 
   // Evaluated live preview summary
@@ -431,7 +489,7 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
                   <Button
                     size="sm"
                     className="h-7 text-xs gap-1 font-semibold"
-                    onClick={() => setShowAddRule(true)}
+                    onClick={handleStartAddRule}
                   >
                     <Plus className="size-3" />
                     Add Condition Rule
@@ -439,12 +497,18 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
                 )}
               </div>
 
-              {/* Inline Add Rule Form */}
+              {/* Inline Add / Edit Rule Form */}
               {showAddRule && (
                 <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-3 text-xs animate-in fade-in duration-150">
                   <div className="font-semibold text-xs text-foreground flex items-center justify-between">
-                    <span>New Condition Rule</span>
-                    <button type="button" onClick={() => setShowAddRule(false)}>
+                    <span>{editingRuleId ? "Edit Condition Rule" : "New Condition Rule"}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddRule(false)
+                        setEditingRuleId(null)
+                      }}
+                    >
                       <X className="size-3.5 text-muted-foreground hover:text-foreground" />
                     </button>
                   </div>
@@ -520,9 +584,17 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
                   </div>
                   <div className="flex items-center gap-2 pt-1">
                     <Button size="sm" className="h-7 text-xs font-semibold" onClick={handleAddCondition}>
-                      Save Condition Rule
+                      {editingRuleId ? "Update Condition Rule" : "Save Condition Rule"}
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAddRule(false)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setShowAddRule(false)
+                        setEditingRuleId(null)
+                      }}
+                    >
                       Cancel
                     </Button>
                   </div>
@@ -570,15 +642,26 @@ export function UniversalRulesClient({ forcedMode }: UniversalRulesClientProps) 
                           </div>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDeleteRule(rule.id)}
-                        title="Delete Condition Rule"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleStartEditRule(rule)}
+                          title="Edit Condition Rule"
+                        >
+                          <Edit3 className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteRule(rule.id)}
+                          title="Delete Condition Rule"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))
                 ) : (

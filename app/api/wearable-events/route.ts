@@ -15,9 +15,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // 1. Fetch wearable event types and devices in parallel (excluding type 2 watermark_listening)
-    const [typesRes, devTableRes] = await Promise.all([
+    // 1. Fetch wearable event types, rules, and devices in parallel (excluding type 2 watermark_listening)
+    const [typesRes, rulesRes, devTableRes] = await Promise.all([
       supabase.from("wearable_event_types").select("*").neq("type", 2).order("type", { ascending: true }),
+      supabase.from("wearable_field_rules").select("*").order("priority", { ascending: true }),
       supabase.from("wearable_devices").select("device_id").limit(200),
     ])
 
@@ -58,16 +59,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: eventsError.message }, { status: 500 })
     }
 
-    // Enrich wearable event types with templates and field rules (exclude type 2)
+    // Parse rules by type from DB (table rows and JSONB field_rules)
+    const rulesByType: Record<number, any[]> = {}
+    ;(rulesRes.data || []).forEach((r: any) => {
+      if (!rulesByType[r.type_id]) rulesByType[r.type_id] = []
+      rulesByType[r.type_id].push({
+        id: String(r.id),
+        field: r.field,
+        operator: r.operator,
+        value: r.value,
+        display_text: r.display_text,
+        badge_color: r.badge_color || "default",
+        enabled: r.enabled ?? true,
+      })
+    })
+
     const dbTypes = (typesRes.data || []).filter((d: any) => d.type !== 2)
+    dbTypes.forEach((t: any) => {
+      if ((!rulesByType[t.type] || rulesByType[t.type].length === 0) && Array.isArray(t.field_rules) && t.field_rules.length > 0) {
+        rulesByType[t.type] = t.field_rules
+      }
+    })
+
+    // Enrich wearable event types with DB templates and field rules (exclude type 2)
     const enrichedEventTypes = DEFAULT_WEARABLE_EVENT_TYPES
       .filter((defType) => defType.type !== 2)
       .map((defType) => {
         const matchedDb = dbTypes.find((d: any) => d.type === defType.type)
+        const customRules = rulesByType[defType.type]
+        const finalRules = customRules && customRules.length > 0 ? customRules : defType.field_rules
+
         return {
           ...defType,
           name: matchedDb?.name || defType.name,
           description: matchedDb?.description || defType.description,
+          template: matchedDb?.template || defType.template,
+          structure: matchedDb?.structure || defType.structure,
+          sample: matchedDb?.sample || defType.sample,
+          field_rules: finalRules,
         }
       })
 

@@ -5,23 +5,50 @@ import { DEFAULT_WEARABLE_EVENT_TYPES } from "@/lib/wearable-event-defaults"
 export async function GET() {
   try {
     const supabase = createAdminClient()
-    const { data: dbTypes } = await supabase
-      .from("wearable_event_types")
-      .select("*")
-      .neq("type", 2)
-      .order("type", { ascending: true })
+    const [typesRes, rulesRes] = await Promise.all([
+      supabase.from("wearable_event_types").select("*").neq("type", 2).order("type", { ascending: true }),
+      supabase.from("wearable_field_rules").select("*").order("priority", { ascending: true }),
+    ])
 
-    const dbList = (dbTypes || []).filter((d: any) => d.type !== 2)
+    const dbList = (typesRes.data || []).filter((d: any) => d.type !== 2)
+    const dbRules = rulesRes.data || []
 
-    // 1. Enrich default types with DB names and descriptions
+    const rulesByType: Record<number, any[]> = {}
+    dbRules.forEach((rule: any) => {
+      if (!rulesByType[rule.type_id]) rulesByType[rule.type_id] = []
+      rulesByType[rule.type_id].push({
+        id: String(rule.id),
+        field: rule.field,
+        operator: rule.operator,
+        value: rule.value,
+        display_text: rule.display_text,
+        badge_color: rule.badge_color || "default",
+        enabled: rule.enabled ?? true,
+      })
+    })
+
+    dbList.forEach((t: any) => {
+      if ((!rulesByType[t.type] || rulesByType[t.type].length === 0) && Array.isArray(t.field_rules) && t.field_rules.length > 0) {
+        rulesByType[t.type] = t.field_rules
+      }
+    })
+
+    // 1. Enrich default types with DB names, descriptions, templates, and field rules
     const enriched = DEFAULT_WEARABLE_EVENT_TYPES
       .filter((defType) => defType.type !== 2)
       .map((defType) => {
         const matched = dbList.find((d: any) => d.type === defType.type)
+        const customRules = rulesByType[defType.type]
+        const finalRules = customRules && customRules.length > 0 ? customRules : defType.field_rules
+
         return {
           ...defType,
           name: matched?.name || defType.name,
           description: matched?.description || defType.description,
+          template: matched?.template || defType.template,
+          structure: matched?.structure || defType.structure,
+          sample: matched?.sample || defType.sample,
+          field_rules: finalRules,
         }
       })
 
@@ -32,10 +59,10 @@ export async function GET() {
         type: d.type,
         name: d.name,
         description: d.description || "",
-        template: `[${d.name}] {content}`,
-        structure: {},
-        sample: {},
-        field_rules: [],
+        template: d.template || `[${d.name}] {content}`,
+        structure: d.structure || {},
+        sample: d.sample || {},
+        field_rules: rulesByType[d.type] || d.field_rules || [],
       }))
 
     return NextResponse.json({
@@ -50,7 +77,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, name, description, template, structure, sample } = body
+    const { type, name, description, template, structure, sample, field_rules } = body
 
     if (type === undefined || !name) {
       return NextResponse.json({ error: "Type ID and Name are required" }, { status: 400 })
@@ -63,11 +90,16 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    const payload = {
+    const payload: Record<string, any> = {
       type: typeNum,
       name: String(name).trim().toUpperCase(),
       description: description ? String(description).trim() : "",
+      updated_at: new Date().toISOString(),
     }
+    if (template !== undefined) payload.template = template
+    if (structure !== undefined) payload.structure = structure
+    if (sample !== undefined) payload.sample = sample
+    if (field_rules !== undefined) payload.field_rules = field_rules
 
     const { data, error } = await supabase
       .from("wearable_event_types")
@@ -75,7 +107,19 @@ export async function POST(request: NextRequest) {
       .select()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      // If table doesn't have extended columns yet, fallback to core columns
+      const corePayload = {
+        type: typeNum,
+        name: payload.name,
+        description: payload.description,
+      }
+      const { error: coreErr } = await supabase
+        .from("wearable_event_types")
+        .upsert(corePayload, { onConflict: "type" })
+
+      if (coreErr) {
+        return NextResponse.json({ error: coreErr.message }, { status: 500 })
+      }
     }
 
     return NextResponse.json({
@@ -87,6 +131,7 @@ export async function POST(request: NextRequest) {
         template: template || undefined,
         structure: structure || undefined,
         sample: sample || undefined,
+        field_rules: field_rules || [],
       },
     })
   } catch (err: any) {
