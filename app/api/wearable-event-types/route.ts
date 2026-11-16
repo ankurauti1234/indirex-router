@@ -8,23 +8,26 @@ export async function GET() {
     const { data: dbTypes } = await supabase
       .from("wearable_event_types")
       .select("*")
+      .neq("type", 2)
       .order("type", { ascending: true })
 
-    const dbList = dbTypes || []
+    const dbList = (dbTypes || []).filter((d: any) => d.type !== 2)
 
     // 1. Enrich default types with DB names and descriptions
-    const enriched = DEFAULT_WEARABLE_EVENT_TYPES.map((defType) => {
-      const matched = dbList.find((d: any) => d.type === defType.type)
-      return {
-        ...defType,
-        name: matched?.name || defType.name,
-        description: matched?.description || defType.description,
-      }
-    })
+    const enriched = DEFAULT_WEARABLE_EVENT_TYPES
+      .filter((defType) => defType.type !== 2)
+      .map((defType) => {
+        const matched = dbList.find((d: any) => d.type === defType.type)
+        return {
+          ...defType,
+          name: matched?.name || defType.name,
+          description: matched?.description || defType.description,
+        }
+      })
 
     // 2. Include any custom event types stored in DB that are not in hardcoded defaults
     const customTypes = dbList
-      .filter((d: any) => !DEFAULT_WEARABLE_EVENT_TYPES.some((def) => def.type === d.type))
+      .filter((d: any) => d.type !== 2 && !DEFAULT_WEARABLE_EVENT_TYPES.some((def) => def.type === d.type))
       .map((d: any) => ({
         type: d.type,
         name: d.name,

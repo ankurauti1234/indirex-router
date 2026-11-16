@@ -68,48 +68,6 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
     ],
   },
   {
-    type: 2,
-    name: "WATERMARK_LISTENING",
-    description: "Mic listening / carrier heartbeat. Sent every 15s.",
-    template: "[Listening] {content} • Carrier Heartbeat",
-    structure: {
-      content: "string (hex watermark or 'listening')",
-      details: {
-        carrier: "string",
-        mic_level_db: "int",
-        interval_sec: "int",
-      },
-    },
-    sample: {
-      content: "listening",
-      details: {
-        carrier: "active",
-        mic_level_db: -42,
-        interval_sec: 15,
-      },
-    },
-    field_rules: [
-      {
-        id: "rule-wearable-listening-active",
-        field: "content",
-        operator: "contains",
-        value: "listening",
-        display_text: "Listening",
-        badge_color: "info",
-        enabled: true,
-      },
-      {
-        id: "rule-wearable-carrier-online",
-        field: "details.carrier",
-        operator: "equals",
-        value: "active",
-        display_text: "Mic Active",
-        badge_color: "success",
-        enabled: true,
-      },
-    ],
-  },
-  {
     type: 3,
     name: "WIFI_STATUS",
     description: "WiFi on/off/connect/disconnect event + 180s periodic heartbeat.",

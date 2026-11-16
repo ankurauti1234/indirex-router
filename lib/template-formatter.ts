@@ -291,11 +291,6 @@ function buildIntelligentFallbackSummary(details: any, badgePrefix: string, type
     return `${badgePrefix}[${category}] ${content} • Watermark Verified`.trim()
   }
 
-  if (typeId === 2 && (details.content || details.details?.carrier)) {
-    const watermark = details.content || "Heartbeat"
-    return `${badgePrefix}[Listening] ${watermark} • Mic Active`.trim()
-  }
-
   // Wearable Device Calibration / Registration
   if (typeId === 4 || details.calibration_summary || details.meter_id) {
     const status = details.status || details.calibration_summary?.registration || "Installed"

@@ -15,9 +15,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // 1. Fetch wearable event types and devices in parallel
+    // 1. Fetch wearable event types and devices in parallel (excluding type 2 watermark_listening)
     const [typesRes, devTableRes] = await Promise.all([
-      supabase.from("wearable_event_types").select("*").order("type", { ascending: true }),
+      supabase.from("wearable_event_types").select("*").neq("type", 2).order("type", { ascending: true }),
       supabase.from("wearable_devices").select("device_id").limit(200),
     ])
 
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
       distinctDevices = Array.from(new Set(recentRes.data?.map((d: any) => d.device_id).filter(Boolean) || [])).sort()
     }
 
-    // 3. Build filtered query for wearable events
-    let query = supabase.from("wearable_events").select("*", { count: "exact" })
+    // 3. Build filtered query for wearable events (excluding type 2 heartbeat)
+    let query = supabase.from("wearable_events").select("*", { count: "exact" }).neq("type", 2)
 
     if (type && type !== "ALL") {
       query = query.eq("type", parseInt(type, 10))
@@ -58,16 +58,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: eventsError.message }, { status: 500 })
     }
 
-    // Enrich wearable event types with templates and field rules
-    const dbTypes = typesRes.data || []
-    const enrichedEventTypes = DEFAULT_WEARABLE_EVENT_TYPES.map((defType) => {
-      const matchedDb = dbTypes.find((d: any) => d.type === defType.type)
-      return {
-        ...defType,
-        name: matchedDb?.name || defType.name,
-        description: matchedDb?.description || defType.description,
-      }
-    })
+    // Enrich wearable event types with templates and field rules (exclude type 2)
+    const dbTypes = (typesRes.data || []).filter((d: any) => d.type !== 2)
+    const enrichedEventTypes = DEFAULT_WEARABLE_EVENT_TYPES
+      .filter((defType) => defType.type !== 2)
+      .map((defType) => {
+        const matchedDb = dbTypes.find((d: any) => d.type === defType.type)
+        return {
+          ...defType,
+          name: matchedDb?.name || defType.name,
+          description: matchedDb?.description || defType.description,
+        }
+      })
 
     return NextResponse.json({
       success: true,

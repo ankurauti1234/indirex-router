@@ -133,11 +133,15 @@ async function handleExportRequest(params: ExportParams) {
 
   // 1. Fetch metadata: event types
   let eventTypesList: any[] = []
-  const { data: dbTypes } = await supabase.from(typesTableName).select("*").order("type", { ascending: true })
+  let typesQuery = supabase.from(typesTableName).select("*").order("type", { ascending: true })
+  if (source === "wearable_events") {
+    typesQuery = typesQuery.neq("type", 2)
+  }
+  const { data: dbTypes } = await typesQuery
   if (dbTypes && dbTypes.length > 0) {
-    eventTypesList = dbTypes
+    eventTypesList = source === "wearable_events" ? dbTypes.filter((t: any) => t.type !== 2) : dbTypes
   } else if (source === "wearable_events") {
-    eventTypesList = DEFAULT_WEARABLE_EVENT_TYPES
+    eventTypesList = DEFAULT_WEARABLE_EVENT_TYPES.filter((t) => t.type !== 2)
   } else if (source === "router_events") {
     eventTypesList = DEFAULT_ROUTER_EVENT_TYPES
   }
@@ -150,6 +154,9 @@ async function handleExportRequest(params: ExportParams) {
   const buildFilteredQuery = (fields = "*") => {
     let q = supabase.from(tableName).select(fields)
 
+    if (source === "wearable_events") {
+      q = q.neq("type", 2)
+    }
     if (types && types.length > 0) {
       q = q.in("type", types)
     }
@@ -177,6 +184,7 @@ async function handleExportRequest(params: ExportParams) {
   if (format === "preview") {
     // Exact count
     let countQuery = supabase.from(tableName).select("*", { count: "exact", head: true })
+    if (source === "wearable_events") countQuery = countQuery.neq("type", 2)
     if (types && types.length > 0) countQuery = countQuery.in("type", types)
     if (deviceId && deviceId !== "ALL") countQuery = countQuery.eq("device_id", deviceId)
     if (source === "router_events") {

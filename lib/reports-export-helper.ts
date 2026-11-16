@@ -80,7 +80,6 @@ export const WEARABLE_EVENT_COLUMNS: ExportColumnDef[] = [
 
 export const WEARABLE_EVENT_TYPE_NAMES: Record<number, string> = {
   1: "SONG_MATCHED",
-  2: "WATERMARK_LISTENING",
   3: "WIFI_STATUS",
   4: "DEVICE_CALIBRATION",
 }
@@ -305,9 +304,6 @@ export function flattenWearableEventRow(
     const category = details.content_type || record.content_type || "Content"
     const mediaName = record.content || details.content || details.song || details.title || "Channel Matched"
     summary = `[${category}] ${mediaName} • Watermark Verified`
-  } else if (typeId === 2) {
-    const wm = record.content || details.content || "Heartbeat"
-    summary = `[Listening] ${wm} • Carrier Heartbeat`
   } else if (typeId === 3) {
     const status = record.wifi_status || details.wifi || "ON"
     const ssid = record.ssid ? ` • SSID: ${record.ssid}` : ""
