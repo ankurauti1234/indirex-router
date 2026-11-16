@@ -282,7 +282,7 @@ export const DEFAULT_WEARABLE_EVENT_TYPES: WearableEventTypeMeta[] = [
         field: "active_app",
         operator: "not_equals",
         value: "",
-        display_text: "App Active",
+        display_text: "{value}",
         badge_color: "success",
         enabled: true,
       },

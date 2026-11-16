@@ -49,7 +49,7 @@ VALUES (
     "ssid": ""
   }'::jsonb,
   '[
-    {"id":"rule-wearable-app-detected","field":"active_app","operator":"not_equals","value":"","display_text":"App Active","badge_color":"success","enabled":true},
+    {"id":"rule-wearable-app-detected","field":"active_app","operator":"not_equals","value":"","display_text":"{value}","badge_color":"success","enabled":true},
     {"id":"rule-wearable-cast-source","field":"source","operator":"contains","value":"CAST","display_text":"Google Cast","badge_color":"info","enabled":true},
     {"id":"rule-wearable-smart-tv","field":"tv_platform","operator":"contains","value":"Android","display_text":"Android TV","badge_color":"default","enabled":true}
   ]'::jsonb

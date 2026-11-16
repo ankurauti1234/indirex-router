@@ -486,6 +486,8 @@ export function UniversalEventsClient({
       ? domPlatform.platform
       : (
           domPlatform ||
+          getNestedProperty(evt.details, "active_app") ||
+          getNestedProperty(evt.details, "platform") ||
           getNestedProperty(evt.details, "content.platform") ||
           getNestedProperty(evt.details, "session.platform") ||
           getNestedProperty(evt.details, "session.platform_canonical") ||
@@ -503,7 +505,11 @@ export function UniversalEventsClient({
     }
 
     const isCategoryBadge = (text: string) =>
-      Boolean(evt.details?.content_type && text.toLowerCase() === String(evt.details.content_type).toLowerCase())
+      Boolean(
+        (evt.details?.content_type && text.toLowerCase() === String(evt.details.content_type).toLowerCase()) ||
+        (evt.details?.active_app && text.toLowerCase() === String(evt.details.active_app).toLowerCase()) ||
+        (evt.details?.platform && text.toLowerCase() === String(evt.details.platform).toLowerCase())
+      )
 
     // Deduplicate any badge text that might also appear in displaySummary (preserve content_type categories)
     matchedBadges.forEach((b) => {

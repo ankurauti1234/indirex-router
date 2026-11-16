@@ -144,7 +144,18 @@ export function evaluateRuleCondition(details: any, rule: DynamicFieldRule): boo
  */
 export function getMatchedRuleBadges(details: any, rules?: DynamicFieldRule[]): DynamicFieldRule[] {
   if (!rules || !Array.isArray(rules) || !details) return []
-  return rules.filter(rule => evaluateRuleCondition(details, rule))
+  return rules
+    .filter((rule) => evaluateRuleCondition(details, rule))
+    .map((rule) => {
+      if (rule.display_text && rule.display_text.includes("{value}")) {
+        const val = getNestedProperty(details, rule.field)
+        return {
+          ...rule,
+          display_text: rule.display_text.replace(/\{value\}/gi, String(val ?? "")),
+        }
+      }
+      return rule
+    })
 }
 
 /**
@@ -163,13 +174,21 @@ export function renderEventSummary(
   const workingDetails = JSON.parse(JSON.stringify(details))
 
   // Apply active rule condition mutations to workingDetails
-  // Exclude content, title, and key identifier fields from being mutated so actual entity values (e.g. song titles, SSIDs) are preserved
+  // Exclude content, title, and key identifier fields from being mutated so actual entity values (e.g. song titles, SSIDs, apps) are preserved
   const protectedFields = new Set([
     "content",
     "content_type",
     "title",
     "content.title",
     "song",
+    "active_app",
+    "platform",
+    "source",
+    "tv_brand",
+    "tv_model",
+    "tv_platform",
+    "tv_ip",
+    "meter_id",
     "device_id",
     "sub_device_id",
     "ssid",
@@ -199,6 +218,10 @@ export function renderEventSummary(
           val = workingDetails.content || workingDetails.song || workingDetails.title || "Channel Matched"
         } else if (key === "content_type" && typeId === 1) {
           val = workingDetails.content_type || "Content"
+        } else if (key === "platform" && workingDetails.active_app) {
+          val = workingDetails.active_app
+        } else if (key === "active_app" && workingDetails.platform) {
+          val = workingDetails.platform
         } else {
           return ""
         }
