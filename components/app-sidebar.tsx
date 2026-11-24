@@ -24,6 +24,7 @@ import {
   Layers,
   Radio,
   Zap,
+  Send,
 } from "lucide-react"
 import { useTelemetryModeStore } from "@/lib/use-telemetry-mode-store"
 
@@ -60,6 +61,15 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
           url: "/events",
         },
         { title: "Reports", icon: FileBarChart, url: "/reports" },
+        ...(isWearable
+          ? [
+              {
+                title: "Publish Events",
+                icon: Send,
+                url: "/publish-events",
+              },
+            ]
+          : []),
       ],
     },
     {
